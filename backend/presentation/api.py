@@ -40,9 +40,9 @@ class VPCRequestAPI(BaseModel):
     cidr_block: str
     enable_dns_hostnames: bool = True
     enable_dns_support: bool = True
-    availability_zones: List[str]
-    public_subnet_cidrs: List[str]
-    private_subnet_cidrs: List[str]
+    availability_zones: List[str] = []
+    public_subnet_cidrs: List[str] = []
+    private_subnet_cidrs: List[str] = []
     tags: Dict[str, str] = {}
 
 
@@ -53,6 +53,27 @@ class S3RequestAPI(BaseModel):
     encryption_enabled: bool = True
     public_read_access: bool = False
     lifecycle_rules: List[Dict[str, Any]] = []
+    tags: Dict[str, str] = {}
+
+
+class WebAppRequestAPI(BaseModel):
+    """API model for web application template requests."""
+    app_name: str = Field(..., description="Name of the web application")
+    framework: str = Field(default="react", description="Frontend framework (react, vue, angular)")
+    domain_name: str = Field(default="", description="Custom domain name (optional)")
+    environment: str = Field(default="dev", description="Environment (dev, staging, prod)")
+    database_required: bool = Field(default=True, description="Whether app needs a database")
+    ssl_enabled: bool = Field(default=False, description="Enable SSL certificate")
+    tags: Dict[str, str] = {}
+
+
+class ApiServiceRequestAPI(BaseModel):
+    """API model for API service template requests."""
+    api_name: str = Field(..., description="Name of the API service")
+    language: str = Field(default="nodejs", description="Programming language (nodejs, python, java, go)")
+    database_required: bool = Field(default=True, description="Whether API needs a database")
+    environment: str = Field(default="dev", description="Environment (dev, staging, prod)")
+    auto_scaling: bool = Field(default=False, description="Enable auto scaling (increases cost)")
     tags: Dict[str, str] = {}
 
 
@@ -87,19 +108,20 @@ def create_api() -> FastAPI:
     
     app = FastAPI(
         title="Internal Developer Platform API",
-        description="API for provisioning AWS resources (EC2, VPC, S3)",
-        version="1.0.0"
+        description="API for provisioning AWS resources and application templates",
+        version="2.0.0"
     )
     
     @app.get("/")
     async def root():
         """Health check endpoint."""
-        return {"message": "Internal Developer Platform API is running"}
+        return {"message": "Internal Developer Platform API is running", "version": "2.0.0"}
     
+    # Individual Resource Endpoints (Legacy)
     @app.post("/requests/ec2", response_model=RequestResponseAPI)
     async def create_ec2_request(
         request: EC2RequestAPI,
-        requester: str = "anonymous",  # In production, get from authentication
+        requester: str = "ui-user",
         service: IProvisioningService = Depends(get_provisioning_service)
     ):
         """Create an EC2 provisioning request."""
@@ -108,17 +130,17 @@ def create_api() -> FastAPI:
             request_id = await use_case.execute(requester, request.model_dump())
             return RequestResponseAPI(
                 request_id=request_id,
-                message="EC2 provisioning request submitted successfully"
+                message=f"EC2 instance request created successfully"
             )
         except ProvisioningError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
     @app.post("/requests/vpc", response_model=RequestResponseAPI)
     async def create_vpc_request(
         request: VPCRequestAPI,
-        requester: str = "anonymous",
+        requester: str = "ui-user",
         service: IProvisioningService = Depends(get_provisioning_service)
     ):
         """Create a VPC provisioning request."""
@@ -127,36 +149,76 @@ def create_api() -> FastAPI:
             request_id = await use_case.execute(requester, request.model_dump())
             return RequestResponseAPI(
                 request_id=request_id,
-                message="VPC provisioning request submitted successfully"
+                message=f"VPC network request created successfully"
             )
         except ProvisioningError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
     @app.post("/requests/s3", response_model=RequestResponseAPI)
     async def create_s3_request(
         request: S3RequestAPI,
-        requester: str = "anonymous",
+        requester: str = "ui-user",
         service: IProvisioningService = Depends(get_provisioning_service)
     ):
-        """Create an S3 provisioning request."""
+        """Create an S3 bucket provisioning request."""
         try:
             use_case = CreateS3RequestUseCase(service)
             request_id = await use_case.execute(requester, request.model_dump())
             return RequestResponseAPI(
                 request_id=request_id,
-                message="S3 provisioning request submitted successfully"
+                message=f"S3 bucket '{request.bucket_name}' request created successfully"
             )
         except ProvisioningError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    # Application Template Endpoints (New)
+    @app.post("/requests/web-app", response_model=RequestResponseAPI)
+    async def create_web_app_request(
+        request: WebAppRequestAPI,
+        requester: str = "ui-user",
+        service: IProvisioningService = Depends(get_provisioning_service)
+    ):
+        """Create a complete web application stack."""
+        try:
+            use_case = SubmitRequestUseCase(service)
+            request_id = await use_case.execute(requester, ResourceType.WEB_APP, request.model_dump())
+            return RequestResponseAPI(
+                request_id=request_id,
+                message=f"Web application '{request.app_name}' stack request created successfully"
+            )
+        except ProvisioningError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    @app.post("/requests/api-service", response_model=RequestResponseAPI)
+    async def create_api_service_request(
+        request: ApiServiceRequestAPI,
+        requester: str = "ui-user",
+        service: IProvisioningService = Depends(get_provisioning_service)
+    ):
+        """Create a simple API service with optional database."""
+        try:
+            use_case = SubmitRequestUseCase(service)
+            request_id = await use_case.execute(requester, ResourceType.API_SERVICE, request.model_dump())
+            return RequestResponseAPI(
+                request_id=request_id,
+                message=f"API service '{request.api_name}' request created successfully"
+            )
+        except ProvisioningError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    # Generic endpoint for any request type
     @app.post("/requests", response_model=RequestResponseAPI)
     async def create_generic_request(
         request: GenericRequestAPI,
-        requester: str = "anonymous",
+        requester: str = "ui-user",
         service: IProvisioningService = Depends(get_provisioning_service)
     ):
         """Create a generic provisioning request."""
@@ -169,14 +231,28 @@ def create_api() -> FastAPI:
             )
             return RequestResponseAPI(
                 request_id=request_id,
-                message=f"{request.resource_type.value} provisioning request submitted successfully"
+                message=f"{request.resource_type.value} request created successfully"
             )
         except ProvisioningError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
-    @app.get("/requests/{request_id}", response_model=ProvisioningRequest)
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    # Request management endpoints
+    @app.get("/requests")
+    async def list_requests(
+        requester: Optional[str] = None,
+        service: IProvisioningService = Depends(get_provisioning_service)
+    ):
+        """List all provisioning requests, optionally filtered by requester."""
+        try:
+            use_case = ListRequestsUseCase(service)
+            requests = await use_case.execute(requester)
+            return [req.model_dump() for req in requests]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    @app.get("/requests/{request_id}")
     async def get_request_status(
         request_id: str,
         service: IProvisioningService = Depends(get_provisioning_service)
@@ -187,67 +263,27 @@ def create_api() -> FastAPI:
             request = await use_case.execute(request_id)
             if not request:
                 raise HTTPException(status_code=404, detail="Request not found")
-            return request
+            return request.model_dump()
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
-    @app.get("/requests", response_model=List[ProvisioningRequest])
-    async def list_requests(
-        requester: Optional[str] = None,
-        service: IProvisioningService = Depends(get_provisioning_service)
-    ):
-        """List provisioning requests, optionally filtered by requester."""
-        try:
-            use_case = ListRequestsUseCase(service)
-            requests = await use_case.execute(requester)
-            return requests
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
-    @app.put("/requests/{request_id}/status")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    @app.patch("/requests/{request_id}/status")
     async def update_request_status(
         request_id: str,
         status_update: StatusUpdateAPI,
         service: IProvisioningService = Depends(get_provisioning_service)
     ):
-        """Update the status of a provisioning request (for external processes)."""
+        """Update the status of a provisioning request (used by external processing scripts)."""
         try:
-            success = await service.update_request_status(
-                request_id, 
-                status_update.model_dump(exclude_unset=True)
-            )
+            success = await service.update_request_status(request_id, status_update.model_dump())
             if not success:
                 raise HTTPException(status_code=404, detail="Request not found")
             return {"message": "Status updated successfully"}
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-    @app.patch("/requests/{request_id}/status")
-    async def patch_request_status(
-        request_id: str,
-        status_update: StatusUpdateAPI,
-        service: IProvisioningService = Depends(get_provisioning_service)
-    ):
-        """Partially update the status of a provisioning request (for external processes)."""
-        try:
-            success = await service.update_request_status(
-                request_id, 
-                status_update.model_dump(exclude_unset=True)
-            )
-            if not success:
-                raise HTTPException(status_code=404, detail="Request not found")
-            return {"message": "Status updated successfully"}
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-    
     return app
-
-
-# Create the FastAPI app instance
-app = create_api()

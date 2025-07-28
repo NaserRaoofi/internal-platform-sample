@@ -206,6 +206,35 @@ class QueueProvisioningService(IProvisioningService):
         request.updated_at = datetime.utcnow()
         
         return await self.repository.update(request)
+    
+    async def approve_request(self, request_id: str, approver: str) -> bool:
+        """Approve a provisioning request."""
+        request = await self.repository.find_by_id(request_id)
+        if not request:
+            return False
+        
+        # Mark as approved and queue for processing
+        request.mark_approved(approver)
+        request.mark_in_progress()
+        
+        # Update repository
+        await self.repository.update(request)
+        
+        # Add to processing queue
+        success = await self.queue.enqueue(request)
+        return success
+    
+    async def reject_request(self, request_id: str, approver: str, reason: str = "") -> bool:
+        """Reject a provisioning request."""
+        request = await self.repository.find_by_id(request_id)
+        if not request:
+            return False
+        
+        # Mark as rejected
+        request.mark_rejected(approver, reason)
+        
+        # Update repository
+        return await self.repository.update(request)
 
 
 def create_provisioning_service() -> IProvisioningService:
