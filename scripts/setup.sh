@@ -215,39 +215,31 @@ run_tests() {
 """Basic tests for the Internal Developer Platform."""
 
 import pytest
-from backend.domain.models import EC2Request, VPCRequest, S3Request, ProvisioningRequest, ResourceType
+from backend.domain.models import WebAppRequest, ApiServiceRequest, ProvisioningRequest, ResourceType
 
 
-def test_ec2_request_creation():
-    """Test EC2 request model creation."""
-    ec2_request = EC2Request(
-        instance_type="t3.micro",
-        ami_id="ami-12345",
-        key_pair_name="test-key"
+def test_web_app_request_creation():
+    """Test WebApp request model creation."""
+    webapp_request = WebAppRequest(
+        app_name="my-web-app",
+        environment="dev",
+        frontend_framework="react"
     )
-    assert ec2_request.instance_type == "t3.micro"
-    assert ec2_request.ami_id == "ami-12345"
+    assert webapp_request.app_name == "my-web-app"
+    assert webapp_request.environment == "dev"
+    assert webapp_request.frontend_framework == "react"
 
 
-def test_vpc_request_creation():
-    """Test VPC request model creation."""
-    vpc_request = VPCRequest(
-        cidr_block="10.0.0.0/16",
-        availability_zones=["us-west-2a", "us-west-2b"],
-        public_subnet_cidrs=["10.0.1.0/24", "10.0.2.0/24"],
-        private_subnet_cidrs=["10.0.10.0/24", "10.0.20.0/24"]
+def test_api_service_request_creation():
+    """Test API service request model creation."""
+    api_request = ApiServiceRequest(
+        service_name="my-api-service",
+        environment="dev",
+        runtime="python"
     )
-    assert vpc_request.cidr_block == "10.0.0.0/16"
-    assert len(vpc_request.availability_zones) == 2
-
-
-def test_s3_request_creation():
-    """Test S3 request model creation."""
-    s3_request = S3Request(
-        bucket_name="test-bucket"
-    )
-    assert s3_request.bucket_name == "test-bucket"
-    assert s3_request.encryption_enabled is True
+    assert api_request.service_name == "my-api-service"
+    assert api_request.runtime == "python"
+    assert api_request.monitoring_enabled is True
 
 
 def test_provisioning_request_creation():
@@ -255,11 +247,11 @@ def test_provisioning_request_creation():
     request = ProvisioningRequest(
         id="test-123",
         requester="test-user",
-        resource_type=ResourceType.EC2,
-        resource_config={"instance_type": "t3.micro"}
+        resource_type=ResourceType.WEB_APP,
+        resource_config={"app_name": "test-app", "environment": "dev"}
     )
     assert request.id == "test-123"
-    assert request.resource_type == ResourceType.EC2
+    assert request.resource_type == ResourceType.WEB_APP
     assert request.status.value == "pending"
 EOF
         log "Created basic test file"

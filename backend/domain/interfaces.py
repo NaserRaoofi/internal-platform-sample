@@ -91,6 +91,35 @@ class IProvisioningService(ABC):
             bool: True if update was successful, False otherwise
         """
         pass
+    
+    @abstractmethod
+    async def approve_request(self, request_id: str, approver: str) -> bool:
+        """
+        Approve a provisioning request.
+        
+        Args:
+            request_id: The unique identifier of the request to approve
+            approver: Username of the person approving the request
+            
+        Returns:
+            bool: True if approval was successful, False otherwise
+        """
+        pass
+    
+    @abstractmethod
+    async def reject_request(self, request_id: str, approver: str, reason: str = "") -> bool:
+        """
+        Reject a provisioning request.
+        
+        Args:
+            request_id: The unique identifier of the request to reject
+            approver: Username of the person rejecting the request
+            reason: Optional reason for rejection
+            
+        Returns:
+            bool: True if rejection was successful, False otherwise
+        """
+        pass
 
 
 class IRequestQueue(ABC):
