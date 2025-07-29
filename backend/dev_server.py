@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 def run_command(cmd, name, cwd=None):
     """Run a command and stream output"""
     print(f"Starting {name}...")
+    process = None
     try:
         process = subprocess.Popen(
             cmd,
@@ -26,10 +27,12 @@ def run_command(cmd, name, cwd=None):
             bufsize=1
         )
         
-        for line in iter(process.stdout.readline, ''):
-            print(f"[{name}] {line}", end='')
+        if process.stdout:
+            for line in iter(process.stdout.readline, ''):
+                print(f"[{name}] {line}", end='')
+            
+            process.stdout.close()
         
-        process.stdout.close()
         return_code = process.wait()
         
         if return_code != 0:
@@ -39,9 +42,12 @@ def run_command(cmd, name, cwd=None):
             
     except KeyboardInterrupt:
         print(f"\n🛑 Stopping {name}...")
-        process.terminate()
+        if process:
+            process.terminate()
     except Exception as e:
         print(f"❌ Error running {name}: {str(e)}")
+        if process:
+            process.terminate()
 
 def check_requirements():
     """Check if required tools are installed"""

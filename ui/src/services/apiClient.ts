@@ -92,7 +92,7 @@ class ApiClient {
 
   // Infrastructure Operations
   async createInfrastructure(request: CreateInfraRequest): Promise<JobResponse> {
-    return this.request<JobResponse>('/create-infra', {
+    return this.request<JobResponse>('/api/v1/create-infra', {
       method: 'POST',
       body: JSON.stringify(request),
     });
@@ -213,6 +213,69 @@ export const createS3Bucket = async (data: {
     tags: {
       CreatedBy: 'UI',
       ResourceType: 's3',
+    },
+  });
+};
+
+export const createSirwanTestS3 = async (data: {
+  bucketName: string;
+  environment: 'dev' | 'staging' | 'prod';
+  bucketPurpose: string;
+  versioningEnabled: boolean;
+  encryptionEnabled: boolean;
+  publicReadAccess: boolean;
+  websiteEnabled: boolean;
+  corsEnabled: boolean;
+  lifecycleEnabled: boolean;
+  backupEnabled: boolean;
+  accessLoggingEnabled: boolean;
+  forceDestroy: boolean;
+  // EC2 Configuration
+  ec2Enabled: boolean;
+  ec2InstanceType: string;
+  ec2Purpose: string;
+  ec2KeyName: string;
+  ec2EnableS3Integration: boolean;
+  ec2RootVolumeSize: number;
+  ec2MonitoringEnabled: boolean;
+  ec2CloudwatchLogsEnabled: boolean;
+  ec2EnableElasticIp: boolean;
+}): Promise<JobResponse> => {
+  return apiClient.createInfrastructure({
+    resource_type: 's3',
+    name: data.bucketName,
+    environment: data.environment,
+    region: 'us-east-1',
+    config: {
+      template: 'sirwan-test',  // ✅ Specify which template to use
+      bucket_name: data.bucketName,
+      bucket_purpose: data.bucketPurpose,
+      versioning_enabled: data.versioningEnabled,
+      encryption_enabled: data.encryptionEnabled,
+      public_read_access: data.publicReadAccess,
+      website_enabled: data.websiteEnabled,
+      cors_enabled: data.corsEnabled,
+      lifecycle_enabled: data.lifecycleEnabled,
+      backup_enabled: data.backupEnabled,
+      access_logging_enabled: data.accessLoggingEnabled,
+      force_destroy: data.forceDestroy,
+      // EC2 Configuration
+      ec2_enabled: data.ec2Enabled,
+      ec2_instance_type: data.ec2InstanceType,
+      ec2_purpose: data.ec2Purpose,
+      ec2_key_name: data.ec2KeyName,
+      ec2_enable_s3_integration: data.ec2EnableS3Integration,
+      ec2_root_volume_size: data.ec2RootVolumeSize,
+      ec2_monitoring_enabled: data.ec2MonitoringEnabled,
+      ec2_cloudwatch_logs_enabled: data.ec2CloudwatchLogsEnabled,
+      ec2_enable_elastic_ip: data.ec2EnableElasticIp,
+    },
+    tags: {
+      CreatedBy: 'UI',
+      ResourceType: 'sirwan-test-s3-ec2',
+      Template: 'sirwan-test',  // ✅ Also in tags for clarity
+      Owner: 'sirwan',
+      HasEC2: data.ec2Enabled ? 'true' : 'false',
     },
   });
 };

@@ -31,12 +31,12 @@ class TerraformWorker:
     
     def __init__(self):
         self.redis_conn = Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD,
+            host=settings.redis_host,
+            port=settings.redis_port,
+            password=settings.redis_password,
             decode_responses=True
         )
-        self.terraform_dir = settings.TERRAFORM_DIR
+        self.terraform_dir = settings.terraform_dir
     
     def update_job_status(self, job_id: str, status: JobStatus, 
                          error_message: Optional[str] = None,
@@ -53,7 +53,7 @@ class TerraformWorker:
             self.redis_conn.set(
                 f"job_result:{job_id}",
                 result.json(),
-                ex=settings.JOB_RESULT_TTL
+                ex=settings.job_result_ttl
             )
             
             # Publish WebSocket update
@@ -63,7 +63,7 @@ class TerraformWorker:
                     "type": "status_update",
                     "job_id": job_id,
                     "data": result.dict()
-                })
+                }, default=str)  # Convert datetime to string
             )
             
         except Exception as e:
@@ -88,7 +88,7 @@ class TerraformWorker:
             self.redis_conn.ltrim(f"job_logs:{job_id}", 0, 999)
             
             # Set expiry
-            self.redis_conn.expire(f"job_logs:{job_id}", settings.JOB_RESULT_TTL)
+            self.redis_conn.expire(f"job_logs:{job_id}", settings.job_result_ttl)
             
             # Publish WebSocket update
             self.redis_conn.publish(
@@ -97,7 +97,7 @@ class TerraformWorker:
                     "type": "log_update",
                     "job_id": job_id,
                     "data": log_entry.dict()
-                })
+                }, default=str)  # Convert datetime to string
             )
             
         except Exception as e:
@@ -136,7 +136,10 @@ class TerraformWorker:
     def prepare_terraform_workspace(self, job_request: JobRequest) -> str:
         """Prepare Terraform workspace for job"""
         workspace_dir = f"{self.terraform_dir}/workspaces/{job_request.job_id}"
-        template_dir = f"{self.terraform_dir}/templates/{job_request.resource_type.value}"
+        
+        # Determine template directory based on config or resource type
+        template_name = self.get_template_name(job_request)
+        template_dir = f"{self.terraform_dir}/templates/{template_name}"
         
         try:
             # Create workspace directory
@@ -152,6 +155,26 @@ class TerraformWorker:
                         shutil.copytree(s, d, dirs_exist_ok=True)
                     else:
                         shutil.copy2(s, d)
+                
+                self.add_job_log(job_request.job_id, f"Using template: {template_name}", "INFO")
+            else:
+                # Fallback: try to find a suitable template
+                fallback_template = self.find_fallback_template(job_request.resource_type.value)
+                if fallback_template:
+                    template_dir = f"{self.terraform_dir}/templates/{fallback_template}"
+                    if os.path.exists(template_dir):
+                        for item in os.listdir(template_dir):
+                            s = os.path.join(template_dir, item)
+                            d = os.path.join(workspace_dir, item)
+                            if os.path.isdir(s):
+                                shutil.copytree(s, d, dirs_exist_ok=True)
+                            else:
+                                shutil.copy2(s, d)
+                        self.add_job_log(job_request.job_id, f"Using fallback template: {fallback_template}", "WARNING")
+                    else:
+                        raise Exception(f"No suitable template found for {job_request.resource_type.value}")
+                else:
+                    raise Exception(f"Template directory not found: {template_dir}")
             
             # Generate terraform.tfvars
             tfvars_content = self.generate_tfvars(job_request)
@@ -165,6 +188,59 @@ class TerraformWorker:
             error_msg = f"Failed to prepare workspace: {str(e)}"
             self.add_job_log(job_request.job_id, error_msg, "ERROR")
             raise
+    
+    def get_template_name(self, job_request: JobRequest) -> str:
+        """Determine which template to use based on job request"""
+        # Check if template is explicitly specified in config
+        if "template" in job_request.config:
+            return job_request.config["template"]
+        
+        # Check if template is specified in tags
+        if "Template" in job_request.tags:
+            return job_request.tags["Template"]
+        
+        # Default mapping for backward compatibility
+        template_mapping = {
+            "web_app": "web-app-simple",
+            "api_service": "api-simple", 
+            "s3": "sirwan-test",  # Default S3 to sirwan-test template
+            "ec2": "api-simple",  # Default EC2 to api-simple template
+            "rds": "api-simple",  # Default RDS to api-simple template
+            "vpc": "web-app-simple"  # Default VPC to web-app-simple template
+        }
+        
+        return template_mapping.get(job_request.resource_type.value, job_request.resource_type.value)
+    
+    def find_fallback_template(self, resource_type: str) -> Optional[str]:
+        """Find a fallback template if the primary one doesn't exist"""
+        import os
+        templates_dir = f"{self.terraform_dir}/templates"
+        
+        if not os.path.exists(templates_dir):
+            return None
+        
+        available_templates = [d for d in os.listdir(templates_dir) 
+                             if os.path.isdir(os.path.join(templates_dir, d))]
+        
+        # Fallback logic based on resource type
+        fallback_mapping = {
+            "s3": ["sirwan-test", "web-app-simple"],
+            "ec2": ["api-simple", "web-app-simple"],
+            "web_app": ["web-app-simple"],
+            "api_service": ["api-simple"],
+            "rds": ["api-simple", "web-app-simple"],
+            "vpc": ["web-app-simple"]
+        }
+        
+        for fallback in fallback_mapping.get(resource_type, []):
+            if fallback in available_templates:
+                return fallback
+        
+        # Last resort: return first available template
+        if available_templates:
+            return available_templates[0]
+        
+        return None
     
     def generate_tfvars(self, job_request: JobRequest) -> str:
         """Generate terraform.tfvars content"""
@@ -224,7 +300,7 @@ class TerraformWorker:
                 raise Exception(f"Terraform init failed: {stderr}")
             
             # Plan
-            plan_file = f"{workspace_dir}/tfplan"
+            plan_file = "tfplan"  # Use relative path since we're in workspace_dir
             if job_request.action.value == "destroy":
                 cmd = ["terraform", "plan", "-destroy", f"-out={plan_file}"]
             else:
@@ -267,15 +343,45 @@ class TerraformWorker:
             logger.error(f"Job {job_id} failed: {error_msg}")
             self.update_job_status(job_id, JobStatus.FAILED, error_message=error_msg)
             self.add_job_log(job_id, f"Job failed: {error_msg}", "ERROR")
-            raise
+
+# Standalone function for RQ to call
+def process_infrastructure_job(job_data: Dict[str, Any]) -> str:
+    """Standalone function that RQ can call to process infrastructure jobs"""
+    try:
+        # Convert job_data dict to JobRequest JSON string
+        created_at = job_data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        else:
+            created_at = datetime.utcnow()
+            
+        job_request = JobRequest(
+            job_id=job_data["job_id"],
+            action=job_data.get("action", "create"),
+            resource_type=job_data["resource_type"],
+            name=job_data["name"],
+            environment=job_data.get("environment", "dev"),
+            region=job_data.get("region", "us-east-1"),
+            config=job_data.get("config", {}),
+            tags=job_data.get("tags", {}),
+            created_at=created_at
+        )
+        
+        # Create worker instance and process the job
+        worker = TerraformWorker()
+        return worker.process_infrastructure_job(job_request.json())
+        
+    except Exception as e:
+        logger.error(f"Failed to process job: {str(e)}")
+        raise Exception(f"Job processing failed: {str(e)}")
 
 def start_worker():
     """Start the RQ worker"""
     redis_conn = Redis(
-        host=settings.REDIS_HOST,
-        port=settings.REDIS_PORT,
-        password=settings.REDIS_PASSWORD,
-        decode_responses=True
+        host=settings.redis_host,
+        port=settings.redis_port,
+        password=settings.redis_password,
+        decode_responses=False  # Let RQ handle decoding
     )
     
     queues = [

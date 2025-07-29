@@ -8,46 +8,51 @@ secrets management, and validation.
 
 import os
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings  # type: ignore
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
     
     # Application
-    app_name: str = Field(default="Cloud Automation Platform", env="APP_NAME")
-    debug: bool = Field(default=False, env="DEBUG")
-    environment: str = Field(default="development", env="ENVIRONMENT")
+    app_name: str = "Cloud Automation Platform"
+    debug: bool = False
+    environment: str = "development"
     
     # Redis Configuration
-    redis_host: str = Field(default="localhost", env="REDIS_HOST")
-    redis_port: int = Field(default=6379, env="REDIS_PORT")
-    redis_db: int = Field(default=0, env="REDIS_DB")
-    redis_password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: Optional[str] = None
     
     # Database Configuration
-    database_url: str = Field(default="sqlite:///./jobs.db", env="DATABASE_URL")
+    database_url: str = "sqlite:///./jobs.db"
     
     # AWS Configuration
-    aws_access_key_id: Optional[str] = Field(default=None, env="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: Optional[str] = Field(default=None, env="AWS_SECRET_ACCESS_KEY")
-    aws_default_region: str = Field(default="us-east-1", env="AWS_DEFAULT_REGION")
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_default_region: str = "us-east-1"
     
     # Terraform Configuration
-    terraform_binary_path: str = Field(default="terraform", env="TERRAFORM_BINARY_PATH")
-    terraform_templates_dir: str = Field(default="terraform/templates", env="TERRAFORM_TEMPLATES_DIR")
-    terraform_instances_dir: str = Field(default="terraform/instances", env="TERRAFORM_INSTANCES_DIR")
+    terraform_binary_path: str = "terraform"
+    terraform_templates_dir: str = "terraform/templates"
+    terraform_instances_dir: str = "terraform/instances"
     
     # Job Configuration
-    job_timeout_minutes: int = Field(default=30, env="JOB_TIMEOUT_MINUTES")
-    max_concurrent_jobs: int = Field(default=5, env="MAX_CONCURRENT_JOBS")
+    job_timeout_minutes: int = 30
+    max_concurrent_jobs: int = 5
+    job_result_ttl: int = 3600  # 1 hour in seconds
+    
+    # Terraform Configuration
+    terraform_dir: str = "../terraform"
     
     # Security
-    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
-    cors_origins: list = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
+    secret_key: str = "dev-secret-key-change-in-production"
+    cors_origins: list = ["http://localhost:3000"]
     
     # Logging
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
-    log_file: Optional[str] = Field(default=None, env="LOG_FILE")
+    log_level: str = "INFO"
+    log_file: Optional[str] = None
     
     class Config:
         env_file = ".env"

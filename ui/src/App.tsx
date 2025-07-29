@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react
 import { DeveloperDashboard } from './components/dashboards/DeveloperDashboard';
 import { AdminDashboard } from './components/dashboards/AdminDashboard';
 import { DeployServiceForm } from './components/forms/DeployServiceForm';
+import { SirwanTestS3Form } from './components/forms/SirwanTestS3Form';
 import { Button } from './components/ui/button';
 import { useAppStore } from './store/appStore';
 import './App.css';
@@ -49,6 +50,16 @@ function Navigation() {
                 }`}
               >
                 Deploy Service
+              </Link>
+              <Link
+                to="/sirwan-test-s3"
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  location.pathname === '/sirwan-test-s3'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Sirwan S3 Test
               </Link>
             </div>
           </div>
@@ -114,9 +125,12 @@ function HomePage() {
 
         <div className="mt-12 p-6 bg-muted rounded-lg">
           <h3 className="text-lg font-semibold mb-2">Quick Actions</h3>
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-4 justify-center flex-wrap">
             <Link to="/deploy">
               <Button>🚀 Deploy New Service</Button>
+            </Link>
+            <Link to="/sirwan-test-s3">
+              <Button variant="outline">🪣 Sirwan S3 Test</Button>
             </Link>
             <Button variant="outline">📊 View Analytics</Button>
             <Button variant="outline">📚 Documentation</Button>
@@ -145,6 +159,11 @@ function App() {
             <Route path="/deploy" element={
               <div className="container mx-auto px-4 py-8">
                 <DeployServiceForm />
+              </div>
+            } />
+            <Route path="/sirwan-test-s3" element={
+              <div className="container mx-auto px-4 py-8">
+                <SirwanTestS3Form />
               </div>
             } />
           </Routes>

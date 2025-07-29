@@ -14,7 +14,8 @@ terraform/
 │   └── aws-security-group/    # Security groups
 ├── templates/                 # Application templates
 │   ├── web-app-simple/        # Simple web application
-│   └── api-simple/            # Simple API service
+│   ├── api-simple/            # Simple API service
+│   └── sirwan-test/           # Advanced S3 bucket template
 └── environments/              # Environment-specific configurations
     ├── dev/
     ├── staging/
@@ -65,6 +66,15 @@ Lightweight API service template:
 - **Compute**: EC2 instance with auto-configuration
 - **Database**: RDS instance (optional)
 - **Monitoring**: CloudWatch integration
+
+### Sirwan Test (`templates/sirwan-test/`)
+Advanced S3 bucket template showcasing modular architecture:
+- **Primary Storage**: S3 bucket with comprehensive configuration
+- **Backup Storage**: Optional secondary bucket with retention policies
+- **Lifecycle Management**: Automatic cost optimization with storage class transitions
+- **Website Hosting**: Optional static website hosting with CORS
+- **Monitoring**: CloudWatch logging and event notifications
+- **Security**: Encryption, versioning, and access controls
 
 ## Usage Examples
 

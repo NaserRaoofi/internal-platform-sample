@@ -24,7 +24,7 @@ export const DeployServiceForm = ({ onSuccess, onError }: DeployServiceFormProps
     
     try {
       // Simulate API call
-      const response = await fetch('/create-infra', {
+      const response = await fetch('/api/v1/create-infra', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

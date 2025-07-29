@@ -22,9 +22,9 @@ class DatabaseManager:
     
     def __init__(self):
         self.redis = Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD,
+            host=settings.redis_host,
+            port=settings.redis_port,
+            password=settings.redis_password,
             decode_responses=True,
             socket_connect_timeout=5,
             socket_timeout=5,
@@ -34,7 +34,8 @@ class DatabaseManager:
     def health_check(self) -> bool:
         """Check database connectivity"""
         try:
-            return self.redis.ping()
+            result = self.redis.ping()
+            return bool(result)
         except Exception as e:
             logger.error(f"Database health check failed: {str(e)}")
             return False
@@ -46,7 +47,7 @@ class DatabaseManager:
             value = job_result.json()
             
             # Store with TTL
-            self.redis.setex(key, settings.JOB_RESULT_TTL, value)
+            self.redis.setex(key, settings.job_result_ttl, value)
             
             # Add to job index for listing
             self.redis.zadd(
@@ -65,8 +66,8 @@ class DatabaseManager:
             key = f"job_result:{job_id}"
             data = self.redis.get(key)
             
-            if data:
-                return JobResult.parse_raw(data)
+            if data and isinstance(data, str):
+                return JobResult.model_validate_json(data)
             return None
         except Exception as e:
             logger.error(f"Failed to get job result {job_id}: {str(e)}")
@@ -79,12 +80,14 @@ class DatabaseManager:
             logs_data = self.redis.lrange(key, 0, limit - 1)
             
             logs = []
-            for log_data in logs_data:
-                try:
-                    log = JobLog.parse_raw(log_data)
-                    logs.append(log)
-                except Exception as e:
-                    logger.warning(f"Failed to parse log entry: {str(e)}")
+            if isinstance(logs_data, list):
+                for log_data in logs_data:
+                    try:
+                        if isinstance(log_data, str):
+                            log = JobLog.model_validate_json(log_data)
+                            logs.append(log)
+                    except Exception as e:
+                        logger.warning(f"Failed to parse log entry: {str(e)}")
             
             return logs
         except Exception as e:
@@ -99,11 +102,13 @@ class DatabaseManager:
             job_ids = self.redis.zrevrange("jobs_index", offset, offset + limit - 1)
             
             jobs = []
-            for job_id in job_ids:
-                job_result = self.get_job_result(job_id)
-                if job_result:
-                    if status_filter is None or job_result.status == status_filter:
-                        jobs.append(job_result)
+            if isinstance(job_ids, list):
+                for job_id in job_ids:
+                    if isinstance(job_id, str):
+                        job_result = self.get_job_result(job_id)
+                        if job_result:
+                            if status_filter is None or job_result.status == status_filter:
+                                jobs.append(job_result)
             
             return jobs
         except Exception as e:
@@ -118,10 +123,12 @@ class DatabaseManager:
             # Get all job IDs
             job_ids = self.redis.zrange("jobs_index", 0, -1)
             
-            for job_id in job_ids:
-                job_result = self.get_job_result(job_id)
-                if job_result:
-                    counts[job_result.status.value] += 1
+            if isinstance(job_ids, list):
+                for job_id in job_ids:
+                    if isinstance(job_id, str):
+                        job_result = self.get_job_result(job_id)
+                        if job_result:
+                            counts[job_result.status.value] += 1
             
             return counts
         except Exception as e:
@@ -131,7 +138,7 @@ class DatabaseManager:
     def cleanup_expired_jobs(self) -> int:
         """Clean up expired job data"""
         try:
-            cutoff_time = datetime.utcnow() - timedelta(seconds=settings.JOB_RESULT_TTL)
+            cutoff_time = datetime.utcnow() - timedelta(seconds=settings.job_result_ttl)
             cutoff_timestamp = cutoff_time.timestamp()
             
             # Get expired job IDs
@@ -139,17 +146,20 @@ class DatabaseManager:
                 "jobs_index", "-inf", cutoff_timestamp
             )
             
-            if expired_job_ids:
+            cleanup_count = 0
+            if isinstance(expired_job_ids, list) and expired_job_ids:
                 # Remove from index
                 self.redis.zremrangebyscore("jobs_index", "-inf", cutoff_timestamp)
                 
                 # Clean up individual job data (if not already expired by Redis TTL)
                 for job_id in expired_job_ids:
-                    self.redis.delete(f"job_result:{job_id}")
-                    self.redis.delete(f"job_logs:{job_id}")
+                    if isinstance(job_id, str):
+                        self.redis.delete(f"job_result:{job_id}")
+                        self.redis.delete(f"job_logs:{job_id}")
+                        cleanup_count += 1
             
-            logger.info(f"Cleaned up {len(expired_job_ids)} expired jobs")
-            return len(expired_job_ids)
+            logger.info(f"Cleaned up {cleanup_count} expired jobs")
+            return cleanup_count
             
         except Exception as e:
             logger.error(f"Failed to cleanup expired jobs: {str(e)}")
@@ -201,15 +211,19 @@ class DatabaseManager:
             
             # Convert string values back to appropriate types
             converted_metrics = {}
-            for key, value in metrics.items():
-                try:
-                    # Try to convert to int/float
-                    if '.' in value:
-                        converted_metrics[key] = float(value)
-                    else:
-                        converted_metrics[key] = int(value)
-                except ValueError:
-                    converted_metrics[key] = value
+            if isinstance(metrics, dict):
+                for key, value in metrics.items():
+                    try:
+                        # Try to convert to int/float
+                        if isinstance(value, str):
+                            if '.' in value:
+                                converted_metrics[key] = float(value)
+                            else:
+                                converted_metrics[key] = int(value)
+                        else:
+                            converted_metrics[key] = value
+                    except ValueError:
+                        converted_metrics[key] = value
             
             return converted_metrics
         except Exception as e:
