@@ -214,3 +214,9 @@ Thumbs.db
 # Poetry virtual environment (if created locally)
 .venv/
 poetry-venv/
+
+# Queue and Storage directories for the IDP
+queue/**/*.json
+storage/**/*.json
+!queue/**/.gitkeep
+!storage/**/.gitkeep

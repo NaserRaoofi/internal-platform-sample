@@ -1,21 +1,16 @@
 import { create } from 'zustand';
+import { StateCreator } from 'zustand';
+import { apiClient, JobStatus, JobLog, CreateInfraRequest } from '../services/apiClient';
 
-interface ProvisioningRequest {
-  id: string;
-  requester: string;
-  resource_type: 'WEB_APP' | 'API_SERVICE' | 'DATA_PIPELINE';
-  resource_config: {
-    serviceName?: string;
-    service_name?: string;
-    environment?: string;
-    instanceType?: string;
-    region?: string;
-    [key: string]: any;
-  };
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  created_at: string;
-  updated_at?: string;
-  approval_notes?: string;
+// Updated interfaces for Redis Queue backend
+export interface Job {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  created_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  terraform_output?: Record<string, any>;
+  logs?: JobLog[];
 }
 
 interface AppState {
@@ -23,199 +18,244 @@ interface AppState {
   userRole: 'developer' | 'admin';
   setUserRole: (role: 'developer' | 'admin') => void;
   
-  // Request state
-  requests: ProvisioningRequest[];
-  loading: boolean;
+  // Job Management
+  jobs: Job[];
+  currentJob: Job | null;
+  isLoading: boolean;
   error: string | null;
   
+  // WebSocket Connection
+  wsConnection: WebSocket | null;
+  isConnected: boolean;
+  
   // Actions
-  fetchRequests: () => Promise<void>;
-  submitRequest: (requestData: Omit<ProvisioningRequest, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
-  approveRequest: (requestId: string) => Promise<void>;
-  rejectRequest: (requestId: string, reason: string) => Promise<void>;
+  createInfrastructure: (request: CreateInfraRequest) => Promise<string>; // Returns job ID
+  destroyInfrastructure: (request: CreateInfraRequest) => Promise<string>; // Returns job ID
+  fetchJobStatus: (jobId: string) => Promise<void>;
+  fetchJobLogs: (jobId: string) => Promise<void>;
+  fetchJobs: () => Promise<void>;
+  connectWebSocket: (jobId?: string) => void;
+  disconnectWebSocket: () => void;
+  setCurrentJob: (job: Job | null) => void;
+  clearError: () => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+const createAppStore: StateCreator<AppState> = (set, get) => ({
   // Initial state
   userRole: 'developer',
-  requests: [],
-  loading: false,
+  jobs: [],
+  currentJob: null,
+  isLoading: false,
   error: null,
+  wsConnection: null,
+  isConnected: false,
   
   // User actions
   setUserRole: (role: 'developer' | 'admin') => set({ userRole: role }),
 
-  // API actions
-  fetchRequests: async () => {
-    set({ loading: true, error: null });
+  // Infrastructure actions
+  createInfrastructure: async (request: CreateInfraRequest): Promise<string> => {
+    set({ isLoading: true, error: null });
     
     try {
-      const response = await fetch('http://localhost:8000/api/requests');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const requests = await response.json();
-      set({ requests, loading: false });
-    } catch (error) {
-      console.error('Error fetching requests:', error);
-      // Mock data for demo
-      const mockRequests: ProvisioningRequest[] = [
-        {
-          id: '1',
-          requester: 'developer1',
-          resource_type: 'WEB_APP',
-          resource_config: {
-            serviceName: 'my-web-app',
-            environment: 'production',
-            region: 'us-east-1'
-          },
-          status: 'PENDING',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          requester: 'developer2',
-          resource_type: 'API_SERVICE',
-          resource_config: {
-            serviceName: 'user-api',
-            environment: 'staging',
-            region: 'us-west-2'
-          },
-          status: 'COMPLETED',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: '3',
-          requester: 'developer1',
-          resource_type: 'DATA_PIPELINE',
-          resource_config: {
-            serviceName: 'analytics-pipeline',
-            environment: 'production',
-            region: 'eu-west-1'
-          },
-          status: 'PROCESSING',
-          created_at: new Date(Date.now() - 3600000).toISOString()
-        }
-      ];
-      set({ requests: mockRequests, loading: false, error: 'Using mock data - backend not available' });
-    }
-  },
-
-  submitRequest: async (requestData) => {
-    set({ loading: true, error: null });
-    
-    try {
-      const response = await fetch('http://localhost:8000/api/requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-      });
+      const response = await apiClient.createInfrastructure(request);
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const newRequest = await response.json();
-      set((state) => ({
-        requests: [newRequest, ...state.requests],
-        loading: false
-      }));
-    } catch (error) {
-      console.error('Error submitting request:', error);
-      // Mock submission for demo
-      const mockRequest: ProvisioningRequest = {
-        id: Date.now().toString(),
-        ...requestData,
-        created_at: new Date().toISOString()
+      // Add job to list with initial status
+      const newJob: Job = {
+        job_id: response.job_id,
+        status: 'queued',
+        created_at: new Date().toISOString(),
       };
-      set((state) => ({
-        requests: [mockRequest, ...state.requests],
-        loading: false,
-        error: 'Request submitted with mock data - backend not available'
+      
+      set((state: AppState) => ({
+        jobs: [newJob, ...state.jobs],
+        currentJob: newJob,
+        isLoading: false
       }));
+      
+      return response.job_id;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create infrastructure';
+      set({ error: errorMessage, isLoading: false });
+      throw error;
     }
   },
 
-  approveRequest: async (requestId: string) => {
-    set({ loading: true, error: null });
+  destroyInfrastructure: async (request: CreateInfraRequest): Promise<string> => {
+    set({ isLoading: true, error: null });
     
     try {
-      const response = await fetch(`http://localhost:8000/api/requests/${requestId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await apiClient.destroyInfrastructure(request);
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // Add job to list with initial status
+      const newJob: Job = {
+        job_id: response.job_id,
+        status: 'queued',
+        created_at: new Date().toISOString(),
+      };
       
-      const updatedRequest = await response.json();
-      set((state) => ({
-        requests: state.requests.map(req => 
-          req.id === requestId ? updatedRequest : req
-        ),
-        loading: false
+      set((state: AppState) => ({
+        jobs: [newJob, ...state.jobs],
+        currentJob: newJob,
+        isLoading: false
       }));
+      
+      return response.job_id;
     } catch (error) {
-      console.error('Error approving request:', error);
-      // Mock approval for demo
-      set((state) => ({
-        requests: state.requests.map(req => 
-          req.id === requestId 
-            ? { ...req, status: 'APPROVED' as const, updated_at: new Date().toISOString() }
-            : req
-        ),
-        loading: false,
-        error: 'Request approved with mock data - backend not available'
-      }));
+      const errorMessage = error instanceof Error ? error.message : 'Failed to destroy infrastructure';
+      set({ error: errorMessage, isLoading: false });
+      throw error;
     }
   },
 
-  rejectRequest: async (requestId: string, reason: string) => {
-    set({ loading: true, error: null });
-    
+  fetchJobStatus: async (jobId: string): Promise<void> => {
     try {
-      const response = await fetch(`http://localhost:8000/api/requests/${requestId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reason }),
+      const jobStatus = await apiClient.getJobStatus(jobId);
+      
+      set((state: AppState) => {
+        const updatedJobs = state.jobs.map((job: Job) => 
+          job.job_id === jobId 
+            ? { ...job, ...jobStatus }
+            : job
+        );
+        
+        // If this job wasn't in the list, add it
+        if (!state.jobs.find((job: Job) => job.job_id === jobId)) {
+          updatedJobs.unshift({ ...jobStatus });
+        }
+        
+        return {
+          jobs: updatedJobs,
+          currentJob: state.currentJob?.job_id === jobId 
+            ? { ...state.currentJob, ...jobStatus }
+            : state.currentJob
+        };
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const updatedRequest = await response.json();
-      set((state) => ({
-        requests: state.requests.map(req => 
-          req.id === requestId ? updatedRequest : req
-        ),
-        loading: false
-      }));
     } catch (error) {
-      console.error('Error rejecting request:', error);
-      // Mock rejection for demo
-      set((state) => ({
-        requests: state.requests.map(req => 
-          req.id === requestId 
-            ? { 
-                ...req, 
-                status: 'REJECTED' as const, 
-                updated_at: new Date().toISOString(),
-                approval_notes: reason
-              }
-            : req
-        ),
-        loading: false,
-        error: 'Request rejected with mock data - backend not available'
-      }));
+      console.error('Failed to fetch job status:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch job status' });
     }
   },
-}));
+
+  fetchJobLogs: async (jobId: string): Promise<void> => {
+    try {
+      const response = await apiClient.getJobLogs(jobId);
+      
+      set((state: AppState) => {
+        const updatedJobs = state.jobs.map((job: Job) => 
+          job.job_id === jobId 
+            ? { ...job, logs: response.logs }
+            : job
+        );
+        
+        return {
+          jobs: updatedJobs,
+          currentJob: state.currentJob?.job_id === jobId 
+            ? { ...state.currentJob, logs: response.logs }
+            : state.currentJob
+        };
+      });
+    } catch (error) {
+      console.error('Failed to fetch job logs:', error);
+    }
+  },
+
+  fetchJobs: async (): Promise<void> => {
+    set({ isLoading: true, error: null });
+    
+    try {
+      const response = await apiClient.listJobs();
+      const jobs: Job[] = response.jobs.map(job => ({ ...job }));
+      
+      set({ jobs, isLoading: false });
+    } catch (error) {
+      console.error('Failed to fetch jobs:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch jobs',
+        isLoading: false 
+      });
+    }
+  },
+
+  connectWebSocket: (jobId?: string): void => {
+    const { wsConnection, disconnectWebSocket } = get();
+    
+    // Close existing connection
+    if (wsConnection) {
+      disconnectWebSocket();
+    }
+    
+    try {
+      const ws = apiClient.createWebSocket(jobId);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        set({ wsConnection: ws, isConnected: true });
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'job_status' && data.job_id) {
+            // Update job status from WebSocket
+            set((state: AppState) => ({
+              jobs: state.jobs.map((job: Job) => 
+                job.job_id === data.job_id 
+                  ? { ...job, ...data }
+                  : job
+              ),
+              currentJob: state.currentJob?.job_id === data.job_id 
+                ? { ...state.currentJob, ...data }
+                : state.currentJob
+            }));
+          }
+          
+          if (data.type === 'job_log' && data.job_id) {
+            // Add new log entry
+            set((state: AppState) => ({
+              jobs: state.jobs.map((job: Job) => 
+                job.job_id === data.job_id 
+                  ? { ...job, logs: [...(job.logs || []), data.log] }
+                  : job
+              ),
+              currentJob: state.currentJob?.job_id === data.job_id && state.currentJob
+                ? { ...state.currentJob, logs: [...(state.currentJob.logs || []), data.log] }
+                : state.currentJob
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        set({ wsConnection: null, isConnected: false });
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        set({ wsConnection: null, isConnected: false });
+      };
+      
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error);
+      set({ error: 'Failed to establish real-time connection' });
+    }
+  },
+
+  disconnectWebSocket: (): void => {
+    const { wsConnection } = get();
+    if (wsConnection) {
+      wsConnection.close();
+      set({ wsConnection: null, isConnected: false });
+    }
+  },
+
+  setCurrentJob: (job: Job | null) => set({ currentJob: job }),
+  
+  clearError: () => set({ error: null }),
+});
+
+export const useAppStore = create<AppState>(createAppStore);
