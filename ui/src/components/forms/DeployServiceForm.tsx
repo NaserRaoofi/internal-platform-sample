@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 interface DeployServiceFormProps {
   onSuccess?: (jobId: string) => void;
   onError?: (error: string) => void;
+  onSubmit?: () => void;
+  onCancel?: () => void;
 }
 
 export const DeployServiceForm = ({ onSuccess, onError }: DeployServiceFormProps) => {

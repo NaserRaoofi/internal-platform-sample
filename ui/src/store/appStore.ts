@@ -13,15 +13,28 @@ export interface Job {
   logs?: JobLog[];
 }
 
+// Request interface for compatibility with components
+interface Request {
+  id: string;
+  requester: string;
+  status: string;
+  created_at: string;
+  updated_at?: string; // Add missing property
+  resource_type: string;
+  resource_config: Record<string, any>;
+}
+
 interface AppState {
   // User state
   userRole: 'developer' | 'admin';
   setUserRole: (role: 'developer' | 'admin') => void;
   
-  // Job Management
+  // Job Management (with backward compatibility)
   jobs: Job[];
+  requests: Request[]; // For component compatibility
   currentJob: Job | null;
   isLoading: boolean;
+  loading: boolean; // For component compatibility
   error: string | null;
   
   // WebSocket Connection
@@ -34,6 +47,9 @@ interface AppState {
   fetchJobStatus: (jobId: string) => Promise<void>;
   fetchJobLogs: (jobId: string) => Promise<void>;
   fetchJobs: () => Promise<void>;
+  fetchRequests: () => Promise<void>; // For component compatibility
+  approveRequest: (requestId: string) => Promise<void>; // For admin dashboard
+  rejectRequest: (requestId: string, reason: string) => Promise<void>; // For admin dashboard
   connectWebSocket: (jobId?: string) => void;
   disconnectWebSocket: () => void;
   setCurrentJob: (job: Job | null) => void;
@@ -44,8 +60,10 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
   // Initial state
   userRole: 'developer',
   jobs: [],
+  requests: [], // For component compatibility
   currentJob: null,
   isLoading: false,
+  loading: false, // For component compatibility
   error: null,
   wsConnection: null,
   isConnected: false,
@@ -256,6 +274,75 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
   setCurrentJob: (job: Job | null) => set({ currentJob: job }),
   
   clearError: () => set({ error: null }),
+
+  // Component compatibility methods
+  fetchRequests: async (): Promise<void> => {
+    // Convert jobs to requests format for component compatibility
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await apiClient.listJobs();
+      const jobs: Job[] = response.jobs.map(job => ({ ...job }));
+      
+      // Convert jobs to requests format
+      const requests: Request[] = jobs.map(job => ({
+        id: job.job_id,
+        requester: 'developer1', // Mock for now
+        status: job.status.toUpperCase(),
+        created_at: job.created_at || new Date().toISOString(),
+        resource_type: 'WEB_APP', // Mock for now
+        resource_config: job.terraform_output || {}
+      }));
+      
+      set({ 
+        jobs, 
+        requests, 
+        loading: false, 
+        isLoading: false 
+      });
+    } catch (error) {
+      console.error('Failed to fetch requests:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch requests',
+        loading: false,
+        isLoading: false 
+      });
+    }
+  },
+
+  approveRequest: async (requestId: string): Promise<void> => {
+    try {
+      // Mock approval - in real implementation, this would call an API
+      set((state: AppState) => ({
+        requests: state.requests.map(req => 
+          req.id === requestId 
+            ? { ...req, status: 'APPROVED' }
+            : req
+        )
+      }));
+      console.log(`Request ${requestId} approved`);
+    } catch (error) {
+      console.error('Failed to approve request:', error);
+      set({ error: 'Failed to approve request' });
+    }
+  },
+
+  rejectRequest: async (requestId: string, reason: string): Promise<void> => {
+    try {
+      // Mock rejection - in real implementation, this would call an API
+      set((state: AppState) => ({
+        requests: state.requests.map(req => 
+          req.id === requestId 
+            ? { ...req, status: 'REJECTED' }
+            : req
+        )
+      }));
+      console.log(`Request ${requestId} rejected: ${reason}`);
+    } catch (error) {
+      console.error('Failed to reject request:', error);
+      set({ error: 'Failed to reject request' });
+    }
+  },
 });
 
 export const useAppStore = create<AppState>(createAppStore);
