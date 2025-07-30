@@ -1,0 +1,154 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "internal-platform"
+version = "0.1.0"
+description = "Production-grade Internal Platform with Infrastructure as Code automation"
+authors = ["Internal Platform Team <team@internal-platform.local>"]
+readme = "README.md"
+packages = [{include = "backend", from = "."}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+# Core FastAPI stack
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+websockets = "^12.0"
+
+# Database & Cache
+redis = "^5.0.1"
+rq = "^1.15.1"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.23"}
+alembic = "^1.13.1"
+aiosqlite = "^0.19.0"
+
+# Data validation
+pydantic = "^2.4.0"
+pydantic-settings = "^2.1.0"
+
+# Authentication & Security
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.6"
+
+# Cloud & Infrastructure
+boto3 = "^1.34.0"
+botocore = "^1.34.0"
+
+# HTTP clients
+httpx = "^0.25.2"
+requests = "^2.31.0"
+
+# Logging & Monitoring
+structlog = "^23.2.0"
+prometheus-client = "^0.19.0"
+
+# Utilities
+python-dotenv = "^1.0.0"
+click = "^8.1.7"
+typer = "^0.9.0"
+rich = "^13.7.0"
+
+[tool.poetry.group.dev.dependencies]
+# Testing
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+pytest-cov = "^4.1.0"
+
+# Code quality
+black = "^23.11.0"
+flake8 = "^6.1.0"
+mypy = "^1.7.1"
+isort = "^5.12.0"
+pre-commit = "^3.5.0"
+
+# Development tools
+ipython = "^8.18.0"
+jupyter = "^1.0.0"
+
+[tool.poetry.scripts]
+dev-server = "main:start_dev_server"
+init-db = "init_db:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "redis.*",
+    "rq.*",
+    "boto3.*",
+    "botocore.*",
+    "prometheus_client.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests"
+]
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "*/tests/*",
+    "*/venv/*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:"
+]

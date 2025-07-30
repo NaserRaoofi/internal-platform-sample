@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = None
     
     # Database Configuration
-    database_url: str = "sqlite:///./jobs.db"
+    database_url: str = "sqlite:///./internal_platform.db"
+    database_url_async: str = "sqlite+aiosqlite:///./internal_platform.db"
     
     # AWS Configuration
     aws_access_key_id: Optional[str] = None

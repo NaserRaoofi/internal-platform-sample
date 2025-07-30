@@ -33,6 +33,11 @@ class ResourceType(str, Enum):
     WEB_APP = "web_app"
     API_SERVICE = "api_service"
 
+class UserRole(str, Enum):
+    """User role enumeration"""
+    ADMIN = "admin"
+    DEVELOPER = "developer"
+
 class JobRequest(BaseModel):
     """Job request model for queue processing"""
     job_id: str
