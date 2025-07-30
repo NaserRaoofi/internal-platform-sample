@@ -1,0 +1,135 @@
+{
+    // 🐍 Python Configuration - Automatic Virtual Environment Setup
+    // ============================================================
+    
+    // Python Interpreter - Points to project's virtual environment
+    "python.defaultInterpreterPath": "./backend/.venv/bin/python3.13",
+    "python.pythonPath": "./backend/.venv/bin/python3.13",
+    
+    // Terminal Configuration - Auto-activate virtual environment
+    "python.terminal.activateEnvironment": true,
+    "python.terminal.activateEnvInCurrentTerminal": true,
+    
+    // Linting & Code Quality
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Path": "./backend/.venv/bin/flake8",
+    "python.linting.pylintEnabled": false,
+    "python.linting.mypyEnabled": true,
+    "python.linting.mypyPath": "./backend/.venv/bin/mypy",
+    
+    // Formatting with Black
+    "python.formatting.provider": "black",
+    "python.formatting.blackPath": "./backend/.venv/bin/black",
+    "editor.formatOnSave": true,
+    
+    // Testing Configuration
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestPath": "./backend/.venv/bin/pytest",
+    "python.testing.pytestArgs": [
+        "./backend/tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    
+    // IntelliSense & Language Server
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.extraPaths": [
+        "./backend"
+    ],
+    
+    // File Associations & Extensions
+    "files.associations": {
+        "*.py": "python",
+        "pyproject.toml": "toml",
+        "*.tf": "terraform",
+        "*.tfvars": "terraform"
+    },
+    
+    // 📁 Project Structure - Working Directories
+    "python.defaultWorkingDirectory": "./backend",
+    "terminal.integrated.cwd": "./backend",
+    
+    // 🚀 FastAPI & Development
+    "python.envFile": "./backend/.env",
+    
+    // 📝 Editor Settings for Python
+    "editor.rulers": [79, 88],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        },
+        "editor.tabSize": 4
+    },
+    
+    // 🔧 Terraform Configuration
+    "[terraform]": {
+        "editor.defaultFormatter": "hashicorp.terraform",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2
+    },
+    
+    // 📦 JSON & Config Files
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.tabSize": 2
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.tabSize": 2
+    },
+    
+    // 🎨 TypeScript/React (UI folder)
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 2
+    },
+    
+    // 🔍 Search & Files
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.venv": true,
+        "**/venv": true,
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/terraform/workspaces": true,
+        "**/.terraform": true
+    },
+    
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.DS_Store": true
+    },
+    
+    // 🎯 Internal Developer Platform Specific
+    "python.analysis.include": [
+        "./backend"
+    ],
+    
+    // 📊 Git Configuration
+    "git.ignoreLimitWarning": true,
+    
+    // 💡 Recommendations for Extensions
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.mypy-type-checker",
+        "hashicorp.terraform",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode"
+    ]
+}
