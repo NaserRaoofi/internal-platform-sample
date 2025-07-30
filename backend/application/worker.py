@@ -343,6 +343,7 @@ class TerraformWorker:
             logger.error(f"Job {job_id} failed: {error_msg}")
             self.update_job_status(job_id, JobStatus.FAILED, error_message=error_msg)
             self.add_job_log(job_id, f"Job failed: {error_msg}", "ERROR")
+            return f"Job {job_id} failed: {error_msg}"
 
 # Standalone function for RQ to call
 def process_infrastructure_job(job_data: Dict[str, Any]) -> str:
