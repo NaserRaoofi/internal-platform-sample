@@ -53,9 +53,7 @@ class UserService:
         """Get user by username"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(User).where(
-                    User.username == username, User.is_active.is_(True)
-                )
+                select(User).where(User.username == username, User.is_active.is_(True))
             )
             return result.scalar_one_or_none()
 
@@ -64,9 +62,7 @@ class UserService:
         """Get user by ID"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(User).where(
-                    User.id == user_id, User.is_active.is_(True)
-                )
+                select(User).where(User.id == user_id, User.is_active.is_(True))
             )
             return result.scalar_one_or_none()
 
@@ -83,9 +79,7 @@ class UserService:
                 session.commit()
                 return True
         except Exception as e:
-            logger.error(
-                f"Failed to update last login for user {user_id}: {str(e)}"
-            )
+            logger.error(f"Failed to update last login for user {user_id}: {str(e)}")
             return False
 
 
@@ -182,9 +176,7 @@ class JobService:
         """Get job by ID from SQLite"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(InfrastructureJob).where(
-                    InfrastructureJob.job_id == job_id
-                )
+                select(InfrastructureJob).where(InfrastructureJob.job_id == job_id)
             )
             return result.scalar_one_or_none()
 
@@ -357,9 +349,7 @@ class MetricsService:
                     return {
                         "active_jobs": latest_metrics.active_jobs,
                         "queued_jobs": latest_metrics.queued_jobs,
-                        "completed_jobs_today": (
-                            latest_metrics.completed_jobs_today
-                        ),
+                        "completed_jobs_today": (latest_metrics.completed_jobs_today),
                         "failed_jobs_today": latest_metrics.failed_jobs_today,
                         "recorded_at": latest_metrics.recorded_at.isoformat(),
                     }

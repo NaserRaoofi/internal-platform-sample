@@ -3,32 +3,33 @@
     // ============================================================
     
     // Python Interpreter - Points to project's virtual environment
-    "python.defaultInterpreterPath": "./backend/.venv/bin/python3.13",
-    "python.pythonPath": "./backend/.venv/bin/python3.13",
+    "python.defaultInterpreterPath": "./backend/.venv/bin/python",
+    "python.pythonPath": "./backend/.venv/bin/python",
     
     // Terminal Configuration - Auto-activate virtual environment
     "python.terminal.activateEnvironment": true,
     "python.terminal.activateEnvInCurrentTerminal": true,
     
-    // Linting & Code Quality
+    // Linting & Code Quality - FIXED FOR 88 CHARACTERS
     "python.linting.enabled": true,
     "python.linting.flake8Enabled": true,
     "python.linting.flake8Path": "./backend/.venv/bin/flake8",
+    "python.linting.flake8Args": [
+        "--max-line-length=88", 
+        "--extend-ignore=E203,W503,E501"
+    ],
     "python.linting.pylintEnabled": false,
-    "python.linting.mypyEnabled": true,
-    "python.linting.mypyPath": "./backend/.venv/bin/mypy",
+    "python.linting.mypyEnabled": false,
     
-    // Formatting with Black
+    // Formatting with Black - 88 CHARACTERS
     "python.formatting.provider": "black",
     "python.formatting.blackPath": "./backend/.venv/bin/black",
-    "editor.formatOnSave": true,
+    "python.formatting.blackArgs": ["--line-length=88"],
     
     // Testing Configuration
     "python.testing.pytestEnabled": true,
     "python.testing.pytestPath": "./backend/.venv/bin/pytest",
-    "python.testing.pytestArgs": [
-        "./backend/tests"
-    ],
+    "python.testing.pytestArgs": ["./backend/tests"],
     "python.testing.unittestEnabled": false,
     
     // IntelliSense & Language Server
@@ -36,9 +37,8 @@
     "python.analysis.typeCheckingMode": "basic",
     "python.analysis.autoImportCompletions": true,
     "python.analysis.autoSearchPaths": true,
-    "python.analysis.extraPaths": [
-        "./backend"
-    ],
+    "python.analysis.extraPaths": ["./backend"],
+    "pylance.linting.enabled": false,
     
     // File Associations & Extensions
     "files.associations": {
@@ -48,88 +48,78 @@
         "*.tfvars": "terraform"
     },
     
-    // 📁 Project Structure - Working Directories
-    "python.defaultWorkingDirectory": "./backend",
+    // Terminal Integration
+    "terminal.integrated.defaultProfile.linux": "zsh",
     "terminal.integrated.cwd": "./backend",
     
-    // 🚀 FastAPI & Development
+    // FastAPI & Development
     "python.envFile": "./backend/.env",
     
-    // 📝 Editor Settings for Python
-    "editor.rulers": [79, 88],
+    // Editor Settings - 88 CHARACTER LIMIT
+    "editor.rulers": [88],
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
+    "editor.formatOnSave": true,
+    
+    // Python-specific editor settings
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit"
         },
-        "editor.tabSize": 4
+        "editor.tabSize": 4,
+        "editor.rulers": [88],
+        "editor.wordWrap": "off"
     },
     
-    // 🔧 Terraform Configuration
+    // Terraform Configuration
     "[terraform]": {
         "editor.defaultFormatter": "hashicorp.terraform",
         "editor.formatOnSave": true,
         "editor.tabSize": 2
     },
     
-    // 📦 JSON & Config Files
+    // JSON Configuration
     "[json]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.tabSize": 2
-    },
-    "[jsonc]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.tabSize": 2
+        "editor.formatOnSave": true
     },
     
-    // 🎨 TypeScript/React (UI folder)
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true,
-        "editor.tabSize": 2
-    },
-    "[typescriptreact]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true,
-        "editor.tabSize": 2
+    // Markdown Configuration
+    "[markdown]": {
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        }
     },
     
-    // 🔍 Search & Files
+    // File Explorer
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+    
+    // Git Configuration
+    "git.enableSmartCommit": true,
+    "git.confirmSync": false,
+    
+    // Disable telemetry for privacy
+    "telemetry.telemetryLevel": "off",
+    
+    // Performance optimizations
     "search.exclude": {
-        "**/node_modules": true,
         "**/.venv": true,
+        "**/node_modules": true,
         "**/venv": true,
         "**/__pycache__": true,
-        "**/*.pyc": true,
-        "**/terraform/workspaces": true,
-        "**/.terraform": true
+        "**/.git": true
     },
     
-    "files.exclude": {
-        "**/__pycache__": true,
-        "**/*.pyc": true,
-        "**/.DS_Store": true
-    },
-    
-    // 🎯 Internal Developer Platform Specific
-    "python.analysis.include": [
-        "./backend"
-    ],
-    
-    // 📊 Git Configuration
-    "git.ignoreLimitWarning": true,
-    
-    // 💡 Recommendations for Extensions
-    "recommendations": [
-        "ms-python.python",
-        "ms-python.black-formatter",
-        "ms-python.flake8",
-        "ms-python.mypy-type-checker",
-        "hashicorp.terraform",
-        "bradlc.vscode-tailwindcss",
-        "esbenp.prettier-vscode"
-    ]
+    "files.watcherExclude": {
+        "**/.venv/**": true,
+        "**/node_modules/**": true,
+        "**/venv/**": true,
+        "**/__pycache__/**": true
+    }
 }

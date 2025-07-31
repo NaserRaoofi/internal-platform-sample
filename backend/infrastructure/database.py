@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 from redis import Redis
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.config import get_settings
 from infrastructure.models import Base
@@ -30,13 +30,11 @@ class SQLiteManager:
             settings.database_url,
             echo=settings.debug,
             pool_pre_ping=True,
-            connect_args={"check_same_thread": False}  # SQLite specific
+            connect_args={"check_same_thread": False},  # SQLite specific
         )
-        
+
         self.SessionLocal = sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=self.engine
+            autocommit=False, autoflush=False, bind=self.engine
         )
 
     def health_check(self) -> bool:
@@ -74,7 +72,7 @@ class RedisCacheManager:
             decode_responses=True,
             socket_connect_timeout=5,
             socket_timeout=5,
-            retry_on_timeout=True
+            retry_on_timeout=True,
         )
 
     def health_check(self) -> bool:
@@ -87,8 +85,9 @@ class RedisCacheManager:
             return False
 
     # Job Progress Caching (temporary data)
-    def cache_job_progress(self, job_id: str, progress: Dict[str, Any],
-                           ttl: int = 3600) -> bool:
+    def cache_job_progress(
+        self, job_id: str, progress: Dict[str, Any], ttl: int = 3600
+    ) -> bool:
         """Cache temporary job progress data"""
         try:
             key = f"job_progress:{job_id}"
@@ -112,8 +111,9 @@ class RedisCacheManager:
             return None
 
     # Session Management
-    def store_session(self, session_id: str, session_data: Dict[str, Any],
-                      ttl: int = 3600) -> bool:
+    def store_session(
+        self, session_id: str, session_data: Dict[str, Any], ttl: int = 3600
+    ) -> bool:
         """Store user session data"""
         try:
             key = f"session:{session_id}"
@@ -171,7 +171,7 @@ class DatabaseManager:
         """Check both SQLite and Redis health"""
         return {
             "sqlite": self.sqlite.health_check(),
-            "redis": self.redis.health_check()
+            "redis": self.redis.health_check(),
         }
 
     def initialize_database(self):

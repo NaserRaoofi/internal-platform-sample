@@ -2,9 +2,11 @@
 Job Management API Routes
 ========================
 """
-from fastapi import APIRouter, HTTPException
-from typing import Optional
+
 import logging
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
 
 # from infrastructure.database import sqlite_manager  # TODO: Implement
 # from domain.models import JobStatus  # TODO: Use for filtering
@@ -22,7 +24,7 @@ async def get_job_status(job_id: str):
         return {
             "job_id": job_id,
             "status": "not_implemented",
-            "message": "Job status endpoint to be implemented"
+            "message": "Job status endpoint to be implemented",
         }
     except Exception as e:
         logger.error(f"Failed to get job status: {str(e)}")
@@ -37,7 +39,7 @@ async def get_job_logs(job_id: str, limit: int = 100):
         return {
             "job_id": job_id,
             "logs": [],
-            "message": "Job logs endpoint to be implemented"
+            "message": "Job logs endpoint to be implemented",
         }
     except Exception as e:
         logger.error(f"Failed to get job logs: {str(e)}")
@@ -49,7 +51,7 @@ async def list_jobs(
     status: Optional[str] = None,
     resource_type: Optional[str] = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
 ):
     """List jobs with optional filtering"""
     try:
@@ -57,7 +59,7 @@ async def list_jobs(
         return {
             "jobs": [],
             "total": 0,
-            "message": "Job listing endpoint to be implemented"
+            "message": "Job listing endpoint to be implemented",
         }
     except Exception as e:
         logger.error(f"Failed to list jobs: {str(e)}")

@@ -6,8 +6,9 @@ Contains the main business logic and orchestration services.
 """
 
 import logging
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, Optional
+
 from redis import Redis
 from rq import Queue
 
@@ -15,12 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Redis connection and queue setup
 redis_conn = Redis(
-    host='localhost',
-    port=6379,
-    db=0,
-    decode_responses=False  # Let RQ handle decoding
+    host="localhost", port=6379, db=0, decode_responses=False  # Let RQ handle decoding
 )
-job_queue = Queue('default', connection=redis_conn)
+job_queue = Queue("default", connection=redis_conn)
 
 
 class InfrastructureService:
@@ -37,7 +35,7 @@ class InfrastructureService:
         environment: str = "dev",
         region: str = "us-east-1",
         config: Optional[Dict[str, Any]] = None,
-        tags: Optional[Dict[str, str]] = None
+        tags: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Create infrastructure resources"""
 
@@ -53,17 +51,15 @@ class InfrastructureService:
             "region": region,
             "config": config or {},
             "tags": tags or {},
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
 
         # Queue the job in Redis
         try:
             from application.worker import process_infrastructure_job
+
             job_queue.enqueue(
-                process_infrastructure_job,
-                job_data,
-                job_id=job_id,
-                job_timeout='30m'
+                process_infrastructure_job, job_data, job_id=job_id, job_timeout="30m"
             )
             logger.info(f"Job {job_id} queued successfully")
 
@@ -79,7 +75,7 @@ class InfrastructureService:
                     "region": region,
                     "bucket_name": bucket_name,
                     "message": f"S3 bucket '{bucket_name}' creation queued",
-                    "terraform_template": "s3-bucket"
+                    "terraform_template": "s3-bucket",
                 }
 
             # Default response for other resource types
@@ -89,7 +85,7 @@ class InfrastructureService:
                 "resource_type": resource_type,
                 "name": name,
                 "environment": environment,
-                "region": region
+                "region": region,
             }
 
         except Exception as e:
@@ -102,7 +98,7 @@ class InfrastructureService:
         resource_type: str,
         name: str,
         environment: str = "dev",
-        region: str = "us-east-1"
+        region: str = "us-east-1",
     ) -> Dict[str, Any]:
         """Destroy infrastructure resources"""
 
@@ -113,7 +109,7 @@ class InfrastructureService:
             "status": "queued",
             "action": "destroy",
             "resource_type": resource_type,
-            "name": name
+            "name": name,
         }
 
 

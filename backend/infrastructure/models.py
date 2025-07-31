@@ -7,15 +7,16 @@ caching and job queues.
 """
 
 from datetime import datetime
+
 from sqlalchemy import (
+    JSON,
+    Boolean,
     Column,
+    DateTime,
+    ForeignKey,
     Integer,
     String,
-    DateTime,
-    Boolean,
     Text,
-    ForeignKey,
-    JSON,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -34,9 +35,7 @@ class User(Base):
     role = Column(String(20), nullable=False)  # 'admin' or 'developer'
     password_hash = Column(String(255))  # For future authentication
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime)
 
@@ -52,9 +51,7 @@ class InfrastructureJob(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(String(36), unique=True, index=True)  # UUID as string
-    user_id = Column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Job Details
     resource_type = Column(String(50), nullable=False, index=True)
@@ -75,9 +72,7 @@ class InfrastructureJob(Base):
 
     # Relationships
     user = relationship("User", back_populates="jobs")
-    logs = relationship(
-        "JobLog", back_populates="job", cascade="all, delete-orphan"
-    )
+    logs = relationship("JobLog", back_populates="job", cascade="all, delete-orphan")
 
 
 class JobLog(Base):
@@ -111,9 +106,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Action Details
     action = Column(String(100), nullable=False, index=True)  # actions
