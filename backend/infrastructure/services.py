@@ -17,6 +17,7 @@ from infrastructure.database import redis_cache, sqlite_manager
 from infrastructure.models import (
     AuditLog,
     InfrastructureJob,
+    InfrastructureResource,
     JobLog,
     SystemMetrics,
     User,
@@ -53,7 +54,9 @@ class UserService:
         """Get user by username"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(User).where(User.username == username, User.is_active.is_(True))
+                select(User).where(
+                    User.username == username, User.is_active.is_(True)
+                )
             )
             return result.scalar_one_or_none()
 
@@ -62,7 +65,9 @@ class UserService:
         """Get user by ID"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(User).where(User.id == user_id, User.is_active.is_(True))
+                select(User).where(
+                    User.id == user_id, User.is_active.is_(True)
+                )
             )
             return result.scalar_one_or_none()
 
@@ -79,7 +84,9 @@ class UserService:
                 session.commit()
                 return True
         except Exception as e:
-            logger.error(f"Failed to update last login for user {user_id}: {str(e)}")
+            logger.error(
+                f"Failed to update last login for user {user_id}: {str(e)}"
+            )
             return False
 
 
@@ -176,7 +183,9 @@ class JobService:
         """Get job by ID from SQLite"""
         with sqlite_manager.get_session() as session:
             result = session.execute(
-                select(InfrastructureJob).where(InfrastructureJob.job_id == job_id)
+                select(InfrastructureJob).where(
+                    InfrastructureJob.job_id == job_id
+                )
             )
             return result.scalar_one_or_none()
 
@@ -235,6 +244,130 @@ class JobService:
         except Exception as e:
             logger.error(f"Failed to add job log {job_id}: {str(e)}")
             return False
+
+
+class ResourceService:
+    """Infrastructure resource lifecycle management"""
+
+    @staticmethod
+    def create_resource(
+        job_id: str,
+        user_id: int,
+        resource_type: str,
+        resource_name: str,
+        aws_resource_id: str,
+        aws_arn: Optional[str] = None,
+        region: str = "us-east-1",
+        environment: str = "dev",
+        terraform_outputs: Optional[Dict] = None,
+        resource_config: Optional[Dict] = None,
+    ) -> InfrastructureResource:
+        """Create resource record when infrastructure is created"""
+        with sqlite_manager.get_session() as session:
+            resource = InfrastructureResource(
+                resource_id=aws_resource_id,
+                job_id=job_id,
+                user_id=user_id,
+                resource_type=resource_type,
+                resource_name=resource_name,
+                aws_arn=aws_arn,
+                region=region,
+                environment=environment,
+                status="active",
+                resource_config=resource_config or {},
+                resource_outputs=terraform_outputs or {},
+            )
+            session.add(resource)
+            session.commit()
+            session.refresh(resource)
+
+            # Cache active resource for quick access
+            resource_data = {
+                "resource_id": resource.resource_id,
+                "resource_name": resource.resource_name,
+                "resource_type": resource.resource_type,
+                "status": "active",
+                "created_at": resource.created_at.isoformat(),
+            }
+            redis_cache.cache_set(
+                f"resource:{resource.resource_id}", resource_data
+            )
+
+            return resource
+
+    @staticmethod
+    def destroy_resource(resource_id: str) -> bool:
+        """Mark resource as destroyed when infrastructure is torn down"""
+        try:
+            with sqlite_manager.get_session() as session:
+                session.execute(
+                    update(InfrastructureResource)
+                    .where(InfrastructureResource.resource_id == resource_id)
+                    .values(
+                        status="destroyed",
+                        destroyed_at=datetime.utcnow()
+                    )
+                )
+                session.commit()
+
+                # Remove from Redis cache
+                redis_cache.cache_set(f"resource:{resource_id}", None)
+
+                return True
+        except Exception as e:
+            logger.error(f"Failed to destroy resource {resource_id}: {str(e)}")
+            return False
+
+    @staticmethod
+    def get_user_resources(
+        user_id: int,
+        status: str = "active",
+        resource_type: Optional[str] = None,
+    ) -> List[InfrastructureResource]:
+        """Get user's active resources"""
+        with sqlite_manager.get_session() as session:
+            query = select(InfrastructureResource).where(
+                InfrastructureResource.user_id == user_id,
+                InfrastructureResource.status == status
+            )
+
+            if resource_type:
+                query = query.where(
+                    InfrastructureResource.resource_type == resource_type
+                )
+
+            query = query.order_by(InfrastructureResource.created_at.desc())
+            result = session.execute(query)
+            return list(result.scalars().all())
+
+    @staticmethod
+    def get_resource_by_id(
+        resource_id: str
+    ) -> Optional[InfrastructureResource]:
+        """Get resource by AWS resource ID"""
+        with sqlite_manager.get_session() as session:
+            result = session.execute(
+                select(InfrastructureResource).where(
+                    InfrastructureResource.resource_id == resource_id
+                )
+            )
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    def get_resource_by_name(
+        user_id: int, resource_name: str, environment: str = "dev"
+    ) -> Optional[InfrastructureResource]:
+        """Get resource by name and environment"""
+        with sqlite_manager.get_session() as session:
+            result = session.execute(
+                select(InfrastructureResource).where(
+                    InfrastructureResource.user_id == user_id,
+                    InfrastructureResource.resource_name == resource_name,
+                    InfrastructureResource.environment == environment,
+                    InfrastructureResource.status == "active"
+                )
+            )
+            return result.scalar_one_or_none()
 
 
 class AuditService:
@@ -349,7 +482,9 @@ class MetricsService:
                     return {
                         "active_jobs": latest_metrics.active_jobs,
                         "queued_jobs": latest_metrics.queued_jobs,
-                        "completed_jobs_today": (latest_metrics.completed_jobs_today),
+                        "completed_jobs_today": (
+                            latest_metrics.completed_jobs_today
+                        ),
                         "failed_jobs_today": latest_metrics.failed_jobs_today,
                         "recorded_at": latest_metrics.recorded_at.isoformat(),
                     }
@@ -362,5 +497,6 @@ class MetricsService:
 # Service instances
 user_service = UserService()
 job_service = JobService()
+resource_service = ResourceService()
 audit_service = AuditService()
 metrics_service = MetricsService()

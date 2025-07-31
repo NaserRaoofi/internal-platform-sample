@@ -11,12 +11,21 @@ from typing import Any, Dict, Optional
 
 from redis import Redis
 from rq import Queue
+from utils.job_status import (
+    create_job,
+    update_job_status,
+    JobStatus as UtilsJobStatus,
+    add_job_log
+)
 
 logger = logging.getLogger(__name__)
 
 # Redis connection and queue setup
 redis_conn = Redis(
-    host="localhost", port=6379, db=0, decode_responses=False  # Let RQ handle decoding
+    host="localhost",
+    port=6379,
+    db=0,
+    decode_responses=False  # Let RQ handle decoding
 )
 job_queue = Queue("default", connection=redis_conn)
 
@@ -54,14 +63,25 @@ class InfrastructureService:
             "created_at": datetime.utcnow().isoformat(),
         }
 
+        # Create job in the job status system
+        create_job(job_id, job_data)
+        add_job_log(job_id, f"Started {resource_type} creation process")
+
         # Queue the job in Redis
         try:
             from application.worker import process_infrastructure_job
 
             job_queue.enqueue(
-                process_infrastructure_job, job_data, job_id=job_id, job_timeout="30m"
+                process_infrastructure_job,
+                job_data,
+                job_id=job_id,
+                job_timeout="30m"
             )
             logger.info(f"Job {job_id} queued successfully")
+            add_job_log(job_id, "Job queued in Redis for processing")
+
+            # Update job status to queued
+            update_job_status(job_id, UtilsJobStatus.RUNNING)
 
             # Special handling for S3 bucket creation (sirwan-v23 test case)
             if resource_type.lower() == "s3":
@@ -90,6 +110,8 @@ class InfrastructureService:
 
         except Exception as e:
             logger.error(f"Failed to queue job {job_id}: {str(e)}")
+            update_job_status(job_id, UtilsJobStatus.FAILED, error=str(e))
+            add_job_log(job_id, f"Failed to queue job: {str(e)}")
             raise Exception(f"Failed to queue infrastructure job: {str(e)}")
 
     async def destroy_infrastructure(
@@ -104,13 +126,53 @@ class InfrastructureService:
 
         logger.info(f"Destroying {resource_type} infrastructure: {name}")
 
-        return {
+        # Prepare job data
+        job_data = {
             "job_id": job_id,
-            "status": "queued",
             "action": "destroy",
             "resource_type": resource_type,
             "name": name,
+            "environment": environment,
+            "region": region,
+            "created_at": datetime.utcnow().isoformat(),
         }
+
+        # Create job in the job status system
+        create_job(job_id, job_data)
+        add_job_log(job_id, f"Started {resource_type} destruction process")
+
+        try:
+            from application.worker import process_infrastructure_job
+
+            job_queue.enqueue(
+                process_infrastructure_job,
+                job_data,
+                job_id=job_id,
+                job_timeout="30m"
+            )
+            logger.info(f"Destroy job {job_id} queued successfully")
+            add_job_log(job_id, "Destroy job queued in Redis for processing")
+
+            # Update job status to running
+            update_job_status(job_id, UtilsJobStatus.RUNNING)
+
+            return {
+                "job_id": job_id,
+                "status": "queued",
+                "action": "destroy",
+                "resource_type": resource_type,
+                "name": name,
+                "environment": environment,
+                "region": region,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to queue destroy job {job_id}: {str(e)}")
+            update_job_status(job_id, UtilsJobStatus.FAILED, error=str(e))
+            add_job_log(job_id, f"Failed to queue destroy job: {str(e)}")
+            raise Exception(
+                f"Failed to queue infrastructure destroy job: {str(e)}"
+            )
 
 
 # Create service instance

@@ -19,6 +19,11 @@ from rq import Queue, Worker
 
 from domain.models import JobLog, JobRequest, JobResult, JobStatus
 from infrastructure.config import get_settings
+from utils.job_status import (
+    update_job_status, 
+    add_job_log, 
+    JobStatus as UtilsJobStatus
+)
 
 # Configure logging
 settings = get_settings()
@@ -41,76 +46,12 @@ class TerraformWorker:
         )
         self.terraform_dir = settings.terraform_dir
 
-    def update_job_status(
-        self,
-        job_id: str,
-        status: JobStatus,
-        error_message: Optional[str] = None,
-        terraform_output: Optional[Dict] = None,
-    ) -> None:
-        """Update job status in Redis"""
-        try:
-            result = JobResult(
-                job_id=job_id,
-                status=status,
-                error_message=error_message,
-                terraform_output=terraform_output,
-                completed_at=(
-                    datetime.utcnow()
-                    if status in [JobStatus.COMPLETED, JobStatus.FAILED]
-                    else None
-                ),
-            )
-            self.redis_conn.set(
-                f"job_result:{job_id}", result.json(), ex=settings.job_result_ttl
-            )
-
-            # Publish WebSocket update
-            self.redis_conn.publish(
-                f"job_updates:{job_id}",
-                json.dumps(
-                    {"type": "status_update", "job_id": job_id, "data": result.dict()},
-                    default=str,
-                ),  # Convert datetime to string
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to update job status for {job_id}: {str(e)}")
-
-    def add_job_log(
-        self, job_id: str, message: str, level: str = "INFO", step: Optional[str] = None
-    ) -> None:
-        """Add log entry to job"""
-        try:
-            log_entry = JobLog(message=message, level=level, step=step)
-
-            # Store in Redis list
-            self.redis_conn.lpush(f"job_logs:{job_id}", log_entry.json())
-
-            # Keep only last 1000 logs
-            self.redis_conn.ltrim(f"job_logs:{job_id}", 0, 999)
-
-            # Set expiry
-            self.redis_conn.expire(f"job_logs:{job_id}", settings.job_result_ttl)
-
-            # Publish WebSocket update
-            self.redis_conn.publish(
-                f"job_updates:{job_id}",
-                json.dumps(
-                    {"type": "log_update", "job_id": job_id, "data": log_entry.dict()},
-                    default=str,
-                ),  # Convert datetime to string
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to add job log for {job_id}: {str(e)}")
-
     def run_terraform_command(
         self, cmd: list, cwd: str, job_id: str
     ) -> tuple[bool, str, str]:
         """Execute terraform command with logging"""
         try:
-            self.add_job_log(job_id, f"Executing: {' '.join(cmd)}", "INFO")
+            add_job_log(job_id, f"Executing: {' '.join(cmd)}", "INFO")
 
             process = subprocess.Popen(
                 cmd,
@@ -125,16 +66,16 @@ class TerraformWorker:
             success = process.returncode == 0
 
             if stdout:
-                self.add_job_log(job_id, f"STDOUT: {stdout}", "INFO")
+                add_job_log(job_id, f"STDOUT: {stdout}", "INFO")
             if stderr:
                 level = "WARNING" if success else "ERROR"
-                self.add_job_log(job_id, f"STDERR: {stderr}", level)
+                add_job_log(job_id, f"STDERR: {stderr}", level)
 
             return success, stdout, stderr
 
         except Exception as e:
             error_msg = f"Command execution failed: {str(e)}"
-            self.add_job_log(job_id, error_msg, "ERROR")
+            add_job_log(job_id, error_msg, "ERROR")
             return False, "", error_msg
 
     def prepare_terraform_workspace(self, job_request: JobRequest) -> str:
@@ -161,7 +102,7 @@ class TerraformWorker:
                     else:
                         shutil.copy2(s, d)
 
-                self.add_job_log(
+                add_job_log(
                     job_request.job_id, f"Using template: {template_name}", "INFO"
                 )
             else:
@@ -179,7 +120,7 @@ class TerraformWorker:
                                 shutil.copytree(s, d, dirs_exist_ok=True)
                             else:
                                 shutil.copy2(s, d)
-                        self.add_job_log(
+                        add_job_log(
                             job_request.job_id,
                             f"Using fallback template: {fallback_template}",
                             "WARNING",
@@ -196,14 +137,14 @@ class TerraformWorker:
             with open(f"{workspace_dir}/terraform.tfvars", "w") as f:
                 f.write(tfvars_content)
 
-            self.add_job_log(
+            add_job_log(
                 job_request.job_id, f"Workspace prepared: {workspace_dir}", "INFO"
             )
             return workspace_dir
 
         except Exception as e:
             error_msg = f"Failed to prepare workspace: {str(e)}"
-            self.add_job_log(job_request.job_id, error_msg, "ERROR")
+            add_job_log(job_request.job_id, error_msg, "ERROR")
             raise
 
     def get_template_name(self, job_request: JobRequest) -> str:
@@ -309,12 +250,12 @@ class TerraformWorker:
             job_request = JobRequest.parse_raw(job_request_json)
             job_id = job_request.job_id
 
-            self.add_job_log(
+            add_job_log(
                 job_id,
                 f"Starting {job_request.action.value} job for {job_request.resource_type.value}",
                 "INFO",
             )
-            self.update_job_status(job_id, JobStatus.RUNNING)
+            update_job_status(job_id, UtilsJobStatus.RUNNING)
 
             # Prepare workspace
             workspace_dir = self.prepare_terraform_workspace(job_request)
@@ -361,23 +302,23 @@ class TerraformWorker:
                 try:
                     terraform_output = json.loads(output_json)
                 except json.JSONDecodeError:
-                    self.add_job_log(
+                    add_job_log(
                         job_id, "Failed to parse terraform outputs", "WARNING"
                     )
 
             # Mark as completed
-            self.update_job_status(
-                job_id, JobStatus.COMPLETED, terraform_output=terraform_output
+            update_job_status(
+                job_id, UtilsJobStatus.COMPLETED, terraform_output=terraform_output
             )
-            self.add_job_log(job_id, "Job completed successfully", "INFO")
+            add_job_log(job_id, "Job completed successfully", "INFO")
 
             return f"Job {job_id} completed successfully"
 
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Job {job_id} failed: {error_msg}")
-            self.update_job_status(job_id, JobStatus.FAILED, error_message=error_msg)
-            self.add_job_log(job_id, f"Job failed: {error_msg}", "ERROR")
+            update_job_status(job_id, UtilsJobStatus.FAILED, error_message=error_msg)
+            add_job_log(job_id, f"Job failed: {error_msg}", "ERROR")
             return f"Job {job_id} failed: {error_msg}"
 
 

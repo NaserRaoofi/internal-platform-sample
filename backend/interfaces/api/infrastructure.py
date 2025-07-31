@@ -6,20 +6,15 @@ API Routes - Infrastructure Management
 import logging
 import uuid
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from application.services import infrastructure_service
-from domain.models import JobAction, JobRequest, JobStatus, ResourceType
-from infrastructure.config import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["infrastructure"])
-
-from typing import Any, Dict, Optional
-
-# API Models
-from pydantic import BaseModel, Field
 
 
 class CreateInfraRequest(BaseModel):
@@ -36,7 +31,9 @@ class CreateInfraRequest(BaseModel):
     config: Dict[str, Any] = Field(
         default_factory=dict, description="Resource-specific configuration"
     )
-    tags: Dict[str, str] = Field(default_factory=dict, description="Resource tags")
+    tags: Dict[str, str] = Field(
+        default_factory=dict, description="Resource tags"
+    )
 
 
 class JobResponse(BaseModel):
@@ -57,7 +54,7 @@ async def create_infrastructure(request: CreateInfraRequest):
         created_at = datetime.utcnow().isoformat()
 
         # Use infrastructure service with Redis queue
-        result = await infrastructure_service.create_infrastructure(
+        await infrastructure_service.create_infrastructure(
             job_id=job_id,
             resource_type=request.resource_type,
             name=request.name,
@@ -70,14 +67,18 @@ async def create_infrastructure(request: CreateInfraRequest):
         return JobResponse(
             job_id=job_id,
             status="queued",
-            message=f"Infrastructure creation queued for {request.resource_type}",
+            message=f"Infrastructure creation queued for "
+                   f"{request.resource_type}",
             created_at=created_at,
             estimated_duration="5-15 minutes",
         )
 
     except Exception as e:
         logger.error(f"Failed to queue infrastructure creation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue job: {str(e)}"
+        )
 
 
 @router.post("/destroy-infra", response_model=JobResponse)
@@ -88,7 +89,7 @@ async def destroy_infrastructure(request: CreateInfraRequest):
         created_at = datetime.utcnow().isoformat()
 
         # Use infrastructure service
-        result = await infrastructure_service.destroy_infrastructure(
+        await infrastructure_service.destroy_infrastructure(
             job_id=job_id,
             resource_type=request.resource_type,
             name=request.name,
@@ -99,11 +100,15 @@ async def destroy_infrastructure(request: CreateInfraRequest):
         return JobResponse(
             job_id=job_id,
             status="queued",
-            message=f"Infrastructure destruction queued for {request.resource_type}",
+            message=f"Infrastructure destruction queued for "
+                   f"{request.resource_type}",
             created_at=created_at,
             estimated_duration="3-10 minutes",
         )
 
     except Exception as e:
         logger.error(f"Failed to queue infrastructure destruction: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to queue job: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue job: {str(e)}"
+        )

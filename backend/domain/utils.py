@@ -8,7 +8,6 @@ Production-grade utility functions for the platform.
 import hashlib
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -120,7 +119,8 @@ def mask_sensitive_data(
     def mask_recursive(obj):
         if isinstance(obj, dict):
             for key, value in obj.items():
-                if any(sensitive in key.lower() for sensitive in sensitive_keys):
+                if any(sensitive in key.lower()
+                       for sensitive in sensitive_keys):
                     obj[key] = "***MASKED***"
                 elif isinstance(value, (dict, list)):
                     mask_recursive(value)
@@ -149,7 +149,11 @@ def calculate_estimated_duration(resource_type: str, action: str) -> int:
 
 def parse_terraform_error(error_output: str) -> Dict[str, Any]:
     """Parse Terraform error output for better error reporting"""
-    error_info = {"type": "unknown", "message": error_output, "suggestions": []}
+    error_info = {
+        "type": "unknown",
+        "message": error_output,
+        "suggestions": []
+    }
 
     error_lower = error_output.lower()
 
@@ -212,7 +216,10 @@ def get_terraform_version() -> Optional[str]:
         import subprocess
 
         result = subprocess.run(
-            ["terraform", "version"], capture_output=True, text=True, timeout=10
+            ["terraform", "version"],
+            capture_output=True,
+            text=True,
+            timeout=10
         )
 
         if result.returncode == 0:
@@ -234,7 +241,9 @@ def create_backup_name(original_name: str) -> str:
     return f"{original_name}_backup_{timestamp}"
 
 
-def validate_json_config(config_str: str) -> tuple[bool, Optional[Dict], Optional[str]]:
+def validate_json_config(
+    config_str: str
+) -> tuple[bool, Optional[Dict], Optional[str]]:
     """Validate JSON configuration string"""
     try:
         config = json.loads(config_str)
@@ -267,7 +276,8 @@ def merge_configs(
     result = base_config.copy()
 
     for key, value in override_config.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+        if (key in result and isinstance(result[key], dict) and
+                isinstance(value, dict)):
             result[key] = merge_configs(result[key], value)
         else:
             result[key] = value

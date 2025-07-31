@@ -6,7 +6,6 @@ Centralized job status management for infrastructure operations.
 """
 
 import json
-import time
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -31,7 +30,9 @@ class JobManager:
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-    def create_job(self, job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_job(
+        self, job_id: str, job_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Create a new job record"""
         job_record = {
             "job_id": job_id,
@@ -67,7 +68,12 @@ class JobManager:
         if status == JobStatus.RUNNING and not job_record.get("started_at"):
             job_record["started_at"] = datetime.utcnow().isoformat()
 
-        if status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+        completion_statuses = [
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED
+        ]
+        if status in completion_statuses:
             job_record["completed_at"] = datetime.utcnow().isoformat()
 
         if error_message:
@@ -79,7 +85,9 @@ class JobManager:
         self._save_job(job_id, job_record)
         return job_record
 
-    def add_job_log(self, job_id: str, message: str, level: str = "INFO") -> None:
+    def add_job_log(
+        self, job_id: str, message: str, level: str = "INFO"
+    ) -> None:
         """Add log entry to job"""
         job_record = self.get_job(job_id)
         if not job_record:
@@ -113,7 +121,9 @@ class JobManager:
         except (json.JSONDecodeError, IOError):
             return None
 
-    def get_job_logs(self, job_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_job_logs(
+        self, job_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """Get job logs"""
         job_record = self.get_job(job_id)
         if not job_record:
@@ -161,7 +171,8 @@ class JobManager:
                 with open(job_file, "r") as f:
                     job_record = json.load(f)
 
-                created_at = datetime.fromisoformat(job_record.get("created_at", ""))
+                created_at_str = job_record.get("created_at", "")
+                created_at = datetime.fromisoformat(created_at_str)
 
                 if created_at < cutoff_date:
                     job_file.unlink()
@@ -193,7 +204,9 @@ def create_job(job_id: str, job_data: Dict[str, Any]) -> Dict[str, Any]:
     return job_manager.create_job(job_id, job_data)
 
 
-def update_job_status(job_id: str, status: JobStatus, **kwargs) -> Dict[str, Any]:
+def update_job_status(
+    job_id: str, status: JobStatus, **kwargs
+) -> Dict[str, Any]:
     """Update job status"""
     return job_manager.update_job_status(job_id, status, **kwargs)
 

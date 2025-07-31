@@ -8,7 +8,7 @@ Redis: Caching and job queues only (temporary data)
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Generator, Optional
 
 from redis import Redis
 from sqlalchemy import create_engine, text
@@ -103,7 +103,7 @@ class RedisCacheManager:
         try:
             key = f"job_progress:{job_id}"
             data = self.redis.get(key)
-            if data:
+            if data and isinstance(data, str):
                 return json.loads(data)
             return None
         except Exception as e:
@@ -129,7 +129,7 @@ class RedisCacheManager:
         try:
             key = f"session:{session_id}"
             data = self.redis.get(key)
-            if data:
+            if data and isinstance(data, str):
                 return json.loads(data)
             return None
         except Exception as e:
@@ -154,7 +154,8 @@ class RedisCacheManager:
     def cache_get(self, key: str) -> Optional[str]:
         """Generic cache get operation"""
         try:
-            return self.redis.get(key)
+            result = self.redis.get(key)
+            return result if isinstance(result, str) else None
         except Exception as e:
             logger.error(f"Failed to get cache key {key}: {str(e)}")
             return None
@@ -187,7 +188,7 @@ db_manager = DatabaseManager()
 
 
 # FastAPI dependency
-def get_db() -> Session:
+def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection"""
     db = sqlite_manager.get_session()
     try:

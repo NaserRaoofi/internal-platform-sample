@@ -7,9 +7,7 @@ Centralized logging configuration for the entire platform.
 
 import logging
 import logging.handlers
-import os
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +36,8 @@ def setup_logging(
 
     # Configure logging format
     log_format = (
-        "%(asctime)s - %(name)s - %(levelname)s - " f"[{service_name}] - %(message)s"
+        "%(asctime)s - %(name)s - %(levelname)s - "
+        f"[{service_name}] - %(message)s"
     )
 
     # Configure date format
@@ -89,16 +88,19 @@ def get_job_logger(job_id: str) -> logging.Logger:
 def log_job_start(job_id: str, action: str, resource_type: str):
     """Log job start event"""
     logger = get_job_logger(job_id)
-    logger.info(f"Starting {action} job for {resource_type} - Job ID: {job_id}")
+    message = f"Starting {action} job for {resource_type} - Job ID: {job_id}"
+    logger.info(message)
 
 
 def log_job_completion(job_id: str, success: bool, duration: float):
     """Log job completion event"""
     logger = get_job_logger(job_id)
     status = "SUCCESS" if success else "FAILED"
-    logger.info(
-        f"Job {job_id} completed with status: {status} - Duration: {duration:.2f}s"
+    message = (
+        f"Job {job_id} completed with status: {status} - "
+        f"Duration: {duration:.2f}s"
     )
+    logger.info(message)
 
 
 def log_terraform_output(job_id: str, output: str, level: str = "INFO"):
@@ -123,10 +125,12 @@ class ErrorContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
-            self.logger.error(
-                f"Operation '{self.operation}' failed: {exc_val}", exc_info=True
-            )
+            error_msg = f"Operation '{self.operation}' failed: {exc_val}"
+            self.logger.error(error_msg, exc_info=True)
             return False
         else:
-            self.logger.info(f"Operation '{self.operation}' completed successfully")
+            success_msg = (
+                f"Operation '{self.operation}' completed successfully"
+            )
+            self.logger.info(success_msg)
             return True
