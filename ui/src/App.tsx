@@ -1,16 +1,42 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { DeveloperDashboard } from './components/dashboards/DeveloperDashboard';
 import { AdminDashboard } from './components/dashboards/AdminDashboard';
 import { DeployServiceForm } from './components/forms/DeployServiceForm';
+import { AdminRequests } from './components/AdminRequests';
 import { SirwanTestS3Form } from './components/forms/SirwanTestS3Form';
+import { Login } from './components/auth/Login';
 import { Button } from './components/ui/button';
+import { Badge } from './components/ui/badge';
 import { useAppStore } from './store/appStore';
 import './App.css';
 
+// Protected Route Component
+function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
+  const { userRole } = useAppStore();
+  
+  if (userRole !== 'admin') {
+    return <Navigate to="/developer" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
 function Navigation() {
   const location = useLocation();
-  const { userRole, setUserRole } = useAppStore();
+  const { userRole, currentUser, logout } = useAppStore();
+
+  const handleLogout = () => {
+    logout();
+  };
+
+  // Dynamic portal title based on user role and current route
+  const getPortalTitle = () => {
+    if (location.pathname === '/admin' || userRole === 'admin') {
+      return '🛠️ Admin Portal';
+    }
+    return '👩‍💻 Developer Portal';
+  };
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -18,66 +44,62 @@ function Navigation() {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link to="/" className="text-xl font-bold">
-              🚀 Developer Portal
+              {getPortalTitle()}
             </Link>
             <div className="hidden md:flex space-x-4">
-              <Link
-                to="/developer"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === '/developer'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Developer
-              </Link>
-              <Link
-                to="/admin"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === '/admin'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Admin
-              </Link>
-              <Link
-                to="/deploy"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === '/deploy'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Deploy Service
-              </Link>
-              <Link
-                to="/sirwan-test-s3"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  location.pathname === '/sirwan-test-s3'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Sirwan S3 Test
-              </Link>
+              {userRole === 'admin' && (
+                <>
+                  <Link
+                    to="/admin"
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      location.pathname === '/admin'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Admin Dashboard
+                  </Link>
+                  <Link
+                    to="/developer"
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      location.pathname === '/developer'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Developer View
+                  </Link>
+                </>
+              )}
+              {userRole === 'developer' && (
+                <Link
+                  to="/developer"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    location.pathname === '/developer'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Developer Dashboard
+                </Link>
+              )}
             </div>
           </div>
           
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <span className="text-sm text-muted-foreground">Role:</span>
-              <select
-                value={userRole}
-                onChange={(e) => setUserRole(e.target.value as 'developer' | 'admin')}
-                className="text-sm border rounded px-2 py-1"
+              <span className="text-sm text-muted-foreground">
+                Welcome, {currentUser}
+              </span>
+              <Badge 
+                variant={userRole === 'admin' ? 'destructive' : 'secondary'}
+                className="text-xs"
               >
-                <option value="developer">Developer</option>
-                <option value="admin">Admin</option>
-              </select>
+                {userRole.toUpperCase()}
+              </Badge>
             </div>
-            <Button variant="outline" size="sm">
-              👤 Profile
+            <Button variant="outline" size="sm" onClick={handleLogout}>
+              Logout
             </Button>
           </div>
         </div>
@@ -86,66 +108,15 @@ function Navigation() {
   );
 }
 
-function HomePage() {
-  const { userRole } = useAppStore();
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto text-center">
-        <h1 className="text-4xl font-bold mb-4">
-          Welcome to Developer Portal
-        </h1>
-        <p className="text-xl text-muted-foreground mb-8">
-          Your Internal Developer Platform for seamless infrastructure deployment
-        </p>
-        
-        <div className="grid md:grid-cols-2 gap-6 mt-12">
-          <div className="p-6 border rounded-lg hover:shadow-lg transition-shadow">
-            <div className="text-4xl mb-4">👨‍💻</div>
-            <h3 className="text-xl font-semibold mb-2">Developer Dashboard</h3>
-            <p className="text-muted-foreground mb-4">
-              Deploy services, monitor your applications, and track deployment status
-            </p>
-            <Link to="/developer">
-              <Button className="w-full">Go to Developer Dashboard</Button>
-            </Link>
-          </div>
-          
-          <div className="p-6 border rounded-lg hover:shadow-lg transition-shadow">
-            <div className="text-4xl mb-4">⚙️</div>
-            <h3 className="text-xl font-semibold mb-2">Admin Dashboard</h3>
-            <p className="text-muted-foreground mb-4">
-              Review requests, approve deployments, and monitor system health
-            </p>
-            <Link to="/admin">
-              <Button className="w-full" variant="outline">Go to Admin Dashboard</Button>
-            </Link>
-          </div>
-        </div>
-
-        <div className="mt-12 p-6 bg-muted rounded-lg">
-          <h3 className="text-lg font-semibold mb-2">Quick Actions</h3>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <Link to="/deploy">
-              <Button>🚀 Deploy New Service</Button>
-            </Link>
-            <Link to="/sirwan-test-s3">
-              <Button variant="outline">🪣 Sirwan S3 Test</Button>
-            </Link>
-            <Button variant="outline">📊 View Analytics</Button>
-            <Button variant="outline">📚 Documentation</Button>
-          </div>
-        </div>
-
-        <div className="mt-8 text-sm text-muted-foreground">
-          Currently logged in as: <strong>{userRole}</strong>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function App() {
+  const { isAuthenticated, login, userRole } = useAppStore();
+
+  // If not authenticated, show login page
+  if (!isAuthenticated) {
+    return <Login onLogin={login} />;
+  }
+
+  // If authenticated, show the main application
   return (
     <Router>
       <div className="min-h-screen bg-background">
@@ -153,9 +124,16 @@ function App() {
         
         <main>
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            {/* Default route redirects based on user role */}
+            <Route path="/" element={
+              userRole === 'admin' ? <Navigate to="/admin" replace /> : <Navigate to="/developer" replace />
+            } />
             <Route path="/developer" element={<DeveloperDashboard />} />
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={
+              <ProtectedAdminRoute>
+                <AdminDashboard />
+              </ProtectedAdminRoute>
+            } />
             <Route path="/deploy" element={
               <div className="container mx-auto px-4 py-8">
                 <DeployServiceForm />
@@ -163,8 +141,11 @@ function App() {
             } />
             <Route path="/sirwan-test-s3" element={
               <div className="container mx-auto px-4 py-8">
-                <SirwanTestS3Form />
+                <SirwanTestS3Form isAdmin={userRole === 'admin'} />
               </div>
+            } />
+            <Route path="/admin/requests" element={
+              <AdminRequests userRole={userRole} />
             } />
           </Routes>
         </main>

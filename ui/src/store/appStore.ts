@@ -25,8 +25,14 @@ interface Request {
 }
 
 interface AppState {
-  // User state
+  // Authentication state
+  isAuthenticated: boolean;
+  currentUser: string | null;
   userRole: 'developer' | 'admin';
+  
+  // Auth actions
+  login: (username: string, role: 'developer' | 'admin') => void;
+  logout: () => void;
   setUserRole: (role: 'developer' | 'admin') => void;
   
   // Job Management (with backward compatibility)
@@ -58,6 +64,8 @@ interface AppState {
 
 const createAppStore: StateCreator<AppState> = (set, get) => ({
   // Initial state
+  isAuthenticated: false,
+  currentUser: null,
   userRole: 'developer',
   jobs: [],
   requests: [], // For component compatibility
@@ -67,6 +75,28 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
   error: null,
   wsConnection: null,
   isConnected: false,
+  
+  // Authentication actions
+  login: (username: string, role: 'developer' | 'admin') => {
+    set({ 
+      isAuthenticated: true, 
+      currentUser: username, 
+      userRole: role 
+    });
+  },
+  
+  logout: () => {
+    const { disconnectWebSocket } = get();
+    disconnectWebSocket(); // Clean up WebSocket on logout
+    set({ 
+      isAuthenticated: false, 
+      currentUser: null, 
+      userRole: 'developer',
+      jobs: [],
+      requests: [],
+      currentJob: null 
+    });
+  },
   
   // User actions
   setUserRole: (role: 'developer' | 'admin') => set({ userRole: role }),
@@ -277,42 +307,50 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
 
   // Component compatibility methods
   fetchRequests: async (): Promise<void> => {
-    // Convert jobs to requests format for component compatibility
     set({ loading: true, error: null });
     
     try {
-      const response = await apiClient.listJobs();
-      const jobs: Job[] = response.jobs.map(job => ({ ...job }));
+      // Read requests from localStorage instead of backend API
+      const pendingRequests = JSON.parse(localStorage.getItem('pending-requests') || '[]');
       
-      // Convert jobs to requests format
-      const requests: Request[] = jobs.map(job => ({
-        id: job.job_id,
-        requester: 'developer1', // Mock for now
-        status: job.status.toUpperCase(),
-        created_at: job.created_at || new Date().toISOString(),
-        resource_type: 'WEB_APP', // Mock for now
-        resource_config: job.terraform_output || {}
+      // Convert to the format expected by admin dashboard
+      const requests: Request[] = pendingRequests.map((req: any) => ({
+        id: req.id,
+        requester: req.requested_by,
+        status: req.status.toUpperCase(),
+        created_at: req.created_at,
+        updated_at: req.updated_at,
+        resource_type: req.request_type.toUpperCase(),
+        resource_config: req.configuration
       }));
       
       set({ 
-        jobs, 
         requests, 
-        loading: false, 
-        isLoading: false 
+        loading: false 
       });
+      
     } catch (error) {
-      console.error('Failed to fetch requests:', error);
+      console.error('Failed to fetch requests from localStorage:', error);
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch requests',
-        loading: false,
-        isLoading: false 
+        error: 'Failed to fetch deployment requests', 
+        loading: false 
       });
     }
   },
 
   approveRequest: async (requestId: string): Promise<void> => {
     try {
-      // Mock approval - in real implementation, this would call an API
+      // Update localStorage
+      const storedRequests = localStorage.getItem('pending-requests');
+      if (storedRequests) {
+        const requests = JSON.parse(storedRequests);
+        const updatedRequests = requests.map((req: any) =>
+          req.id === requestId ? { ...req, status: 'APPROVED' } : req
+        );
+        localStorage.setItem('pending-requests', JSON.stringify(updatedRequests));
+      }
+      
+      // Update local state
       set((state: AppState) => ({
         requests: state.requests.map(req => 
           req.id === requestId 
@@ -320,7 +358,8 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
             : req
         )
       }));
-      console.log(`Request ${requestId} approved`);
+      
+      console.log(`Request ${requestId} approved successfully`);
     } catch (error) {
       console.error('Failed to approve request:', error);
       set({ error: 'Failed to approve request' });
@@ -329,7 +368,17 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
 
   rejectRequest: async (requestId: string, reason: string): Promise<void> => {
     try {
-      // Mock rejection - in real implementation, this would call an API
+      // Update localStorage
+      const storedRequests = localStorage.getItem('pending-requests');
+      if (storedRequests) {
+        const requests = JSON.parse(storedRequests);
+        const updatedRequests = requests.map((req: any) =>
+          req.id === requestId ? { ...req, status: 'REJECTED', rejectionReason: reason } : req
+        );
+        localStorage.setItem('pending-requests', JSON.stringify(updatedRequests));
+      }
+      
+      // Update local state
       set((state: AppState) => ({
         requests: state.requests.map(req => 
           req.id === requestId 
@@ -337,6 +386,7 @@ const createAppStore: StateCreator<AppState> = (set, get) => ({
             : req
         )
       }));
+      
       console.log(`Request ${requestId} rejected: ${reason}`);
     } catch (error) {
       console.error('Failed to reject request:', error);

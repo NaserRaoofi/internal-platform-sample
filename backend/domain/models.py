@@ -48,6 +48,16 @@ class UserRole(str, Enum):
     DEVELOPER = "developer"
 
 
+class RequestStatus(str, Enum):
+    """Deployment request status enumeration"""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    DEPLOYED = "deployed"
+    FAILED = "failed"
+
+
 class JobRequest(BaseModel):
     """Job request model for queue processing"""
 
@@ -118,6 +128,28 @@ class InfrastructureRequest(BaseModel):
     region: str = "us-east-1"
     config: Dict[str, Any] = Field(default_factory=dict)
     tags: Dict[str, str] = Field(default_factory=dict)
+
+
+class DeploymentRequest(BaseModel):
+    """Deployment request requiring admin approval"""
+
+    request_id: str
+    user_id: str = "developer"  # In real app, this would come from auth
+    resource_type: ResourceType
+    name: str
+    environment: str = "dev"
+    region: str = "us-east-1"
+    config: Dict[str, Any] = Field(default_factory=dict)
+    tags: Dict[str, str] = Field(default_factory=dict)
+    status: RequestStatus = RequestStatus.PENDING
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    job_id: Optional[str] = None  # Set when deployment starts
+
+    class Config:
+        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 # EC2 specific models

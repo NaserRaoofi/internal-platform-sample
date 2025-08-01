@@ -48,6 +48,27 @@ export interface JobLog {
   step?: string;
 }
 
+export interface DeploymentRequest {
+  request_id: string;
+  user_id: string;
+  resource_type: 'ec2' | 's3' | 'web_app' | 'api_service' | 'vpc' | 'rds';
+  name: string;
+  environment: string;
+  region: string;
+  config: Record<string, any>;
+  tags: Record<string, string>;
+  status: 'pending' | 'approved' | 'rejected' | 'deployed' | 'failed';
+  created_at: string;
+  approved_at?: string;
+  approved_by?: string;
+  rejection_reason?: string;
+  job_id?: string;
+}
+
+export interface DeploymentRequestsResponse {
+  requests: DeploymentRequest[];
+}
+
 export interface JobLogsResponse {
   job_id: string;
   logs: JobLog[];
@@ -139,6 +160,25 @@ class ApiClient {
       : `${WS_BASE_URL}/ws`;
     
     return new WebSocket(wsUrl);
+  }
+
+  // Deployment Request Management (Admin endpoints)
+  async getDeploymentRequests(): Promise<DeploymentRequestsResponse> {
+    return this.request<DeploymentRequestsResponse>('/api/v1/deployment-requests');
+  }
+
+  async approveRequest(requestId: string): Promise<any> {
+    return this.request(`/api/v1/deployment-requests/${requestId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'approve' }),
+    });
+  }
+
+  async rejectRequest(requestId: string, reason: string): Promise<any> {
+    return this.request(`/api/v1/deployment-requests/${requestId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reject', reason }),
+    });
   }
 }
 
@@ -278,4 +318,25 @@ export const createSirwanTestS3 = async (data: {
       HasEC2: data.ec2Enabled ? 'true' : 'false',
     },
   });
+};
+
+// Export the API client instance
+export default apiClient;
+
+// Additional utility functions for new approval workflow
+export const approvalApi = {
+  // Get all deployment requests (admin endpoint)
+  getDeploymentRequests: async (): Promise<DeploymentRequestsResponse> => {
+    return apiClient.getDeploymentRequests();
+  },
+
+  // Approve a deployment request (admin endpoint)
+  approveRequest: async (requestId: string): Promise<any> => {
+    return apiClient.approveRequest(requestId);
+  },
+
+  // Reject a deployment request (admin endpoint)
+  rejectRequest: async (requestId: string, reason: string): Promise<any> => {
+    return apiClient.rejectRequest(requestId, reason);
+  },
 };

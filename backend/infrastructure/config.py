@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = "dev-secret-key-change-in-production"
-    cors_origins: list = ["http://localhost:3000"]
+    cors_origins: list = ["http://localhost:3000", "http://localhost:3001"]
 
     # Logging
     log_level: str = "INFO"
