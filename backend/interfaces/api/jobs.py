@@ -137,10 +137,12 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
             return {
                 "job_id": job_id,
                 "status": job_result.status,
-                "started_at": (job_result.started_at.isoformat() 
-                              if job_result.started_at else None),
-                "completed_at": (job_result.completed_at.isoformat() 
-                                if job_result.completed_at else None),
+                "started_at": (job_result.started_at.isoformat()
+                               if job_result.started_at is not None
+                               else None),
+                "completed_at": (job_result.completed_at.isoformat()
+                                 if job_result.completed_at is not None
+                                 else None),
                 "error_message": job_result.error_message,
                 "terraform_output": job_result.terraform_output,
                 "progress": {
@@ -180,10 +182,10 @@ async def get_job_status(job_id: str, db: Session = Depends(get_db)):
         return {
             "job_id": job_id,
             "status": db_job.status,
-            "started_at": (db_job.started_at.isoformat() 
-                          if db_job.started_at else None),
-            "completed_at": (db_job.completed_at.isoformat() 
-                            if db_job.completed_at else None),
+            "started_at": (db_job.started_at.isoformat()
+                           if db_job.started_at is not None else None),
+            "completed_at": (db_job.completed_at.isoformat()
+                             if db_job.completed_at is not None else None),
             "error_message": db_job.error_message,
             "terraform_output": db_job.terraform_output,
             "progress": progress_data,
@@ -293,7 +295,10 @@ async def process_deployment_job(job_id: str, job_request: CreateJobRequest):
             ))
 
 
-async def process_real_terraform_deployment(job_id: str, job_request: CreateJobRequest):
+async def process_real_terraform_deployment(
+    job_id: str,
+    job_request: CreateJobRequest
+):
     """Process deployment with real Terraform execution"""
     job_result = job_storage[job_id]
     
@@ -306,8 +311,10 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
     os.makedirs(workspace_dir, exist_ok=True)
     
     # Step 1: Validation
-    await update_job_progress(job_id, "Validation", 1, 5,
-                            "Validating configuration and environment...")
+    await update_job_progress(
+        job_id, "Validation", 1, 5,
+        "Validating configuration and environment..."
+    )
     
     # Validate AWS credentials and environment
     validation_result = await run_terraform_command(
@@ -325,12 +332,16 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
     ))
     
     # Step 2: Setup Terraform workspace
-    await update_job_progress(job_id, "Terraform Setup", 2, 5,
-                            "Setting up Terraform workspace...")
+    await update_job_progress(
+        job_id, "Terraform Setup", 2, 5,
+        "Setting up Terraform workspace..."
+    )
     
     # Copy appropriate template based on resource type
     template_source = get_template_path(job_request.resource_type)
-    await setup_terraform_workspace(job_id, workspace_dir, template_source, job_request)
+    await setup_terraform_workspace(
+        job_id, workspace_dir, template_source, job_request
+    )
     
     job_result.logs.append(JobLog(
         message="Terraform workspace setup completed",
@@ -338,8 +349,10 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
     ))
     
     # Step 3: Terraform Init
-    await update_job_progress(job_id, "Terraform Init", 3, 5,
-                            "Initializing Terraform...")
+    await update_job_progress(
+        job_id, "Terraform Init", 3, 5,
+        "Initializing Terraform..."
+    )
     
     init_result = await run_terraform_command(
         job_id, workspace_dir,
@@ -356,8 +369,10 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
     ))
     
     # Step 4: Terraform Plan
-    await update_job_progress(job_id, "Terraform Plan", 4, 5,
-                            "Generating Terraform plan...")
+    await update_job_progress(
+        job_id, "Terraform Plan", 4, 5,
+        "Generating Terraform plan..."
+    )
     
     plan_result = await run_terraform_command(
         job_id, workspace_dir,
@@ -374,8 +389,10 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
     ))
     
     # Step 5: Terraform Apply
-    await update_job_progress(job_id, "Terraform Apply", 5, 5,
-                            "Applying Terraform configuration...")
+    await update_job_progress(
+        job_id, "Terraform Apply", 5, 5,
+        "Applying Terraform configuration..."
+    )
     
     apply_result = await run_terraform_command(
         job_id, workspace_dir,
@@ -397,7 +414,8 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
         job_result.terraform_output = json.loads(output_result["stdout"])
     
     job_result.logs.append(JobLog(
-        message=f"Successfully deployed {job_request.resource_type}: {job_request.name}",
+        message=(f"Successfully deployed {job_request.resource_type}: "
+                 f"{job_request.name}"),
         step="terraform_apply"
     ))
     
@@ -434,7 +452,12 @@ async def process_real_terraform_deployment(job_id: str, job_request: CreateJobR
         logger.error(f"Failed to update database on completion: {db_error}")
 
 
-async def run_terraform_command(job_id: str, workspace_dir: str, command: str, step: str):
+async def run_terraform_command(
+    job_id: str,
+    workspace_dir: str,
+    command: str,
+    step: str
+):
     """Execute a shell command and return the result"""
     try:
         # Set environment variables for Terraform
@@ -490,7 +513,12 @@ async def run_terraform_command(job_id: str, workspace_dir: str, command: str, s
         }
 
 
-async def setup_terraform_workspace(job_id: str, workspace_dir: str, template_source: str, job_request: CreateJobRequest):
+async def setup_terraform_workspace(
+    job_id: str,
+    workspace_dir: str,
+    template_source: str,
+    job_request: CreateJobRequest
+):
     """Setup Terraform workspace with appropriate template"""
     try:
         # Copy template files
@@ -528,11 +556,14 @@ tags = {{
         raise Exception(f"Failed to setup Terraform workspace: {str(e)}")
 
 
-async def create_basic_terraform_config(workspace_dir: str, job_request: CreateJobRequest):
+async def create_basic_terraform_config(
+    workspace_dir: str,
+    job_request: CreateJobRequest
+):
     """Create a basic Terraform configuration if template doesn't exist"""
     
     if job_request.resource_type.lower() == "s3":
-        main_tf_content = f"""
+        main_tf_content = """
 terraform {{
   required_providers {{
     aws = {{
@@ -611,7 +642,7 @@ def get_template_path(resource_type: str) -> str:
     # Map resource types to existing templates/modules
     template_map = {
         "s3": f"{base_path}/modules/aws-s3",
-        "ec2": f"{base_path}/modules/aws-ec2", 
+        "ec2": f"{base_path}/modules/aws-ec2",
         "rds": f"{base_path}/modules/aws-rds",
         "cloudfront": f"{base_path}/modules/aws-cloudfront",
         "sirwan-test": f"{base_path}/templates/sirwan-test"
@@ -620,7 +651,13 @@ def get_template_path(resource_type: str) -> str:
     return template_map.get(resource_type.lower(), "")
 
 
-async def update_job_progress(job_id: str, step_name: str, completed: int, total: int, message: str):
+async def update_job_progress(
+    job_id: str,
+    step_name: str,
+    completed: int,
+    total: int,
+    message: str
+):
     """Update job progress"""
     job_result = job_storage[job_id]
     job_result.progress = JobProgress(
