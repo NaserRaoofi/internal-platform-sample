@@ -23,8 +23,9 @@ export const DeployServiceForm = ({ onSuccess, onError }: DeployServiceFormProps
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      const response = await fetch('/api/v1/create-infra', {
+      // Make API call to backend
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/v1/create-infra`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

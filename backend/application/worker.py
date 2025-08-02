@@ -19,6 +19,7 @@ from rq import Queue, Worker
 
 from domain.models import JobLog, JobRequest, JobResult, JobStatus
 from infrastructure.config import get_settings
+from infrastructure.database import RedisConnectionManager
 from utils.job_status import (
     update_job_status, 
     add_job_log, 
@@ -27,6 +28,7 @@ from utils.job_status import (
 
 # Configure logging
 settings = get_settings()
+redis_manager = RedisConnectionManager()
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -38,12 +40,7 @@ class TerraformWorker:
     """Terraform operations worker"""
 
     def __init__(self):
-        self.redis_conn = Redis(
-            host=settings.redis_host,
-            port=settings.redis_port,
-            password=settings.redis_password,
-            decode_responses=True,
-        )
+        self.redis_manager = RedisConnectionManager()
         self.terraform_dir = settings.terraform_dir
 
     def run_terraform_command(
@@ -356,12 +353,8 @@ def process_infrastructure_job(job_data: Dict[str, Any]) -> str:
 
 def start_worker():
     """Start the RQ worker"""
-    redis_conn = Redis(
-        host=settings.redis_host,
-        port=settings.redis_port,
-        password=settings.redis_password,
-        decode_responses=False,  # Let RQ handle decoding
-    )
+    redis_manager = RedisConnectionManager()
+    redis_conn = redis_manager.get_connection()
 
     queues = [
         Queue("default", connection=redis_conn),
@@ -370,7 +363,7 @@ def start_worker():
     ]
 
     worker = Worker(queues, connection=redis_conn)
-    logger.info("Starting RQ worker...")
+    logger.info("Starting RQ worker with connection pooling...")
     worker.work()
 
 

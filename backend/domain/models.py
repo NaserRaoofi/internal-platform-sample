@@ -111,7 +111,7 @@ class JobResult(BaseModel):
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     terraform_output: Optional[Dict[str, Any]] = None
-    resource_ids: Dict[str, str] = Field(default_factory=dict)  # AWS resource IDs
+    resource_ids: Dict[str, str] = Field(default_factory=dict)  # AWS resource
     logs: List[JobLog] = Field(default_factory=list)
     progress: Optional[JobProgress] = None
 

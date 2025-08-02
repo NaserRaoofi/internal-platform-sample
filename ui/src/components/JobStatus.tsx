@@ -12,7 +12,8 @@ export const JobStatus = ({ jobId, onClose }: JobStatusProps) => {
   useEffect(() => {
     const fetchJobStatus = async () => {
       try {
-        const response = await fetch(`/job-status/${jobId}`);
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/job-status/${jobId}`);
         if (response.ok) {
           const data = await response.json();
           setJob(data);

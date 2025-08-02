@@ -52,7 +52,9 @@ export interface DeploymentRequest {
   request_id: string;
   user_id: string;
   resource_type: 'ec2' | 's3' | 'web_app' | 'api_service' | 'vpc' | 'rds';
-  name: string;
+  template_name: string;  // Added: Template display name
+  service_name: string;   // Added: Service name chosen by developer
+  name: string;           // Keep for backward compatibility
   environment: string;
   region: string;
   config: Record<string, any>;
@@ -322,6 +324,21 @@ export const createSirwanTestS3 = async (data: {
 
 // Export the API client instance
 export default apiClient;
+
+// Direct exports for AdminDashboard compatibility
+export const getDeploymentRequests = (): Promise<DeploymentRequestsResponse> => {
+  return apiClient.getDeploymentRequests();
+};
+
+export const approveDeploymentRequest = (requestId: string, approval: { action: string; reason?: string }): Promise<any> => {
+  if (approval.action === 'approve') {
+    return apiClient.approveRequest(requestId);
+  } else if (approval.action === 'reject') {
+    return apiClient.rejectRequest(requestId, approval.reason || '');
+  } else {
+    throw new Error('Invalid action. Must be "approve" or "reject"');
+  }
+};
 
 // Additional utility functions for new approval workflow
 export const approvalApi = {

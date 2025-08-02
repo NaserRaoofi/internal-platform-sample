@@ -8,11 +8,10 @@ from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from redis import Redis
 from rq import Queue
 
 from infrastructure.config import get_settings
-from infrastructure.database import DatabaseManager
+from infrastructure.database import DatabaseManager, RedisConnectionManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
@@ -26,61 +25,48 @@ async def health_check():
         service_status = {}
         overall_status = "healthy"
 
-        # 1. Check Redis Database Connection
+        # 1. Check Database (SQLite + Redis) Connection
         try:
             db_manager = DatabaseManager()
-            redis_healthy = db_manager.health_check()
-            service_status["database"] = "operational" if redis_healthy else "down"
-            if not redis_healthy:
+            db_health = await db_manager.async_health_check()
+            service_status["database"] = {
+                "sqlite": "operational" if db_health["sqlite"] else "down",
+                "redis": "operational" if db_health["redis"] else "down",
+            }
+            if not db_health["sqlite"] or not db_health["redis"]:
                 overall_status = "degraded"
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
-            service_status["database"] = "down"
+            service_status["database"] = {
+                "sqlite": "down",
+                "redis": "down",
+            }
             overall_status = "degraded"
 
-        # 2. Check Redis Queue System
+        # 2. Check Redis Queue System using connection pool
         try:
-            redis_conn = Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                password=settings.redis_password,
-                decode_responses=False,
-                socket_connect_timeout=3,
-                socket_timeout=3,
-            )
+            redis_manager = RedisConnectionManager()
+            redis_conn = redis_manager.get_connection()
             queue = Queue("default", connection=redis_conn)
 
             # Test queue connectivity by checking queue length
             queue_length = len(queue)
             service_status["queue"] = "operational"
             service_status["queue_jobs"] = queue_length
+            
+            # Close connection (return to pool)
+            redis_conn.close()
 
         except Exception as e:
             logger.error(f"Queue health check failed: {e}")
             service_status["queue"] = "down"
             overall_status = "degraded"
 
-        # 3. Check Redis Connection (separate check for redundancy)
-        try:
-            redis_test = Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                password=settings.redis_password,
-                socket_connect_timeout=3,
-                socket_timeout=3,
-            )
-            redis_ping = redis_test.ping()
-            service_status["redis"] = "operational" if redis_ping else "down"
-            if not redis_ping:
-                overall_status = "degraded"
-        except Exception as e:
-            logger.error(f"Redis health check failed: {e}")
-            service_status["redis"] = "down"
-            overall_status = "degraded"
-
         # 4. Add system information
         service_status["environment"] = settings.environment
         service_status["app_name"] = settings.app_name
+        service_status["connection_pooling"] = "enabled"
+        service_status["async_database"] = "enabled"
 
         # Return appropriate response based on overall health
         if overall_status == "healthy":
@@ -113,4 +99,46 @@ async def health_check():
                     "queue": "unknown",
                 },
             },
+        )
+
+
+@router.get("/performance-test")
+async def performance_test():
+    """Performance comparison between sync and async database operations"""
+    import time
+
+    try:
+        db_manager = DatabaseManager()
+
+        # Test async performance
+        start_time = time.time()
+        await db_manager.async_health_check()
+        async_time = time.time() - start_time
+
+        # Test sync performance
+        start_time = time.time()
+        db_manager.health_check()
+        sync_time = time.time() - start_time
+
+        improvement = (
+            ((sync_time - async_time) / sync_time * 100)
+            if sync_time > 0 else 0
+        )
+
+        return {
+            "sync_operation_time": f"{sync_time:.4f}s",
+            "async_operation_time": f"{async_time:.4f}s",
+            "performance_improvement": f"{improvement:.2f}%",
+            "recommendation": "Use async operations for better performance",
+            "async_enabled": True
+        }
+
+    except Exception as e:
+        logger.error(f"Performance test failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Performance test failed",
+                "details": str(e)
+            }
         )

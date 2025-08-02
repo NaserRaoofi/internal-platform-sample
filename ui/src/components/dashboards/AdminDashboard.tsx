@@ -53,6 +53,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { useAppStore } from '../../store/appStore';
+import { getDeploymentRequests, approveDeploymentRequest, type DeploymentRequest } from '../../services/apiClient';
 
 // Types for better TypeScript support and maintainability
 interface AdminMetricCardProps {
@@ -506,26 +507,45 @@ ServiceHealthDashboard.displayName = 'ServiceHealthDashboard';
  */
 export const AdminDashboard: React.FC = () => {
   const { 
-    requests, 
-    loading, 
-    error, 
-    fetchRequests,
-    approveRequest,
-    rejectRequest 
+    // Keep other store functionality but not requests/fetchRequests 
+    loading: storeLoading, 
+    error: storeError
   } = useAppStore();
 
-  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  // Local state for deployment requests from API
+  const [deploymentRequests, setDeploymentRequests] = useState<DeploymentRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [selectedRequest, setSelectedRequest] = useState<DeploymentRequest | null>(null);
+  const [requestToReject, setRequestToReject] = useState<DeploymentRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [deploymentLogs, setDeploymentLogs] = useState<any[]>([]);
   const [selectedLogEntry, setSelectedLogEntry] = useState<any | null>(null);
 
+  // Load deployment requests from API
+  const fetchDeploymentRequests = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getDeploymentRequests();
+      setDeploymentRequests(response.requests);
+    } catch (err) {
+      console.error('Failed to fetch deployment requests:', err);
+      setError('Failed to load deployment requests');
+      setDeploymentRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Fetch data on component mount
   useEffect(() => {
-    fetchRequests();
+    fetchDeploymentRequests();
     loadDeploymentLogs();
-  }, [fetchRequests]);
+  }, [fetchDeploymentRequests]);
 
   // Load deployment logs from backend only
   const loadDeploymentLogs = useCallback(async () => {
@@ -552,58 +572,61 @@ export const AdminDashboard: React.FC = () => {
 
   // Compute derived metrics with useMemo for performance
   const metrics = useMemo(() => {
-    const pendingRequests = requests.filter(req => req.status === 'PENDING');
-    const processingRequests = requests.filter(req => req.status === 'PROCESSING');
-    const completedRequests = requests.filter(req => req.status === 'COMPLETED');
-    const failedRequests = requests.filter(req => req.status === 'FAILED');
+    const pendingRequests = deploymentRequests.filter(req => req.status === 'pending');
+    const processingRequests = deploymentRequests.filter(req => req.status === 'approved');
+    const completedRequests = deploymentRequests.filter(req => req.status === 'deployed');
+    const failedRequests = deploymentRequests.filter(req => req.status === 'failed');
 
     return {
       pending: pendingRequests.length,
       processing: processingRequests.length,
       completed: completedRequests.length,
       failed: failedRequests.length,
-      total: requests.length,
-      successRate: requests.length > 0 ? 
-        Math.round((completedRequests.length / requests.length) * 100) : 0
+      total: deploymentRequests.length,
+      successRate: deploymentRequests.length > 0 ? 
+        Math.round((completedRequests.length / deploymentRequests.length) * 100) : 0
     };
-  }, [requests]);
+  }, [deploymentRequests]);
 
   // Optimized refresh handler
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchRequests();
+      await fetchDeploymentRequests();
     } finally {
       setRefreshing(false);
     }
-  }, [fetchRequests]);
+  }, [fetchDeploymentRequests]);
 
   // Approval handler with error handling and deployment logging
   const handleApprove = useCallback(async (requestId: string) => {
     try {
-      await approveRequest(requestId);
+      await approveDeploymentRequest(requestId, { action: 'approve' });
       
       // Find the approved request to create deployment log
-      const approvedRequest = requests.find(req => req.id === requestId);
+      const approvedRequest = deploymentRequests.find(req => req.request_id === requestId);
       if (approvedRequest) {
         createDeploymentLog(approvedRequest);
       }
+      
+      // Refresh the requests list
+      await fetchDeploymentRequests();
     } catch (error) {
       console.error('Failed to approve request:', error);
     }
-  }, [approveRequest, requests]);
+  }, [deploymentRequests, fetchDeploymentRequests]);
 
   // Create deployment log entry when request is approved
-  const createDeploymentLog = useCallback(async (request: any) => {
+  const createDeploymentLog = useCallback(async (request: DeploymentRequest) => {
     const logId = `LOG-${Date.now()}`;
     const startTime = new Date().toISOString();
     
     // Create initial log entry
     const newLog = {
       id: logId,
-      requestId: request.id,
-      serviceName: request.configuration?.bucketName || request.title || 'Unknown Service',
-      type: request.request_type?.toUpperCase() || 'UNKNOWN',
+      requestId: request.request_id,
+      serviceName: request.service_name || request.name || 'Unknown Service',
+      type: request.template_name || `${request.resource_type.toUpperCase()} Template`,
       status: 'IN_PROGRESS',
       startTime: startTime,
       endTime: null,
@@ -647,7 +670,7 @@ export const AdminDashboard: React.FC = () => {
         }
       ],
       logs: [
-        `[${new Date().toLocaleString()}] Deployment initiated for: ${request.configuration?.bucketName || 'Unknown'}`,
+        `[${new Date().toLocaleString()}] Deployment initiated for: ${request.service_name || request.name || 'Unknown'}`,
         `[${new Date().toLocaleString()}] Starting validation process...`
       ]
     };
@@ -670,11 +693,11 @@ export const AdminDashboard: React.FC = () => {
         body: JSON.stringify({
           job_id: logId,
           action: 'CREATE',
-          resource_type: request.request_type === 's3_bucket' ? 'S3' : request.request_type?.toUpperCase(),
-          name: request.configuration?.bucketName || request.title,
-          environment: request.configuration?.environment || 'dev',
-          region: request.configuration?.region || 'us-east-1',
-          config: request.configuration,
+          resource_type: request.resource_type?.toUpperCase(),
+          name: request.service_name || request.name,
+          environment: request.environment || 'dev',
+          region: request.region || 'us-east-1',
+          config: request.config,
         }),
       });
 
@@ -787,27 +810,39 @@ export const AdminDashboard: React.FC = () => {
 
   // Rejection handler
   const handleReject = useCallback((requestId: string) => {
-    setSelectedRequest(requestId);
+    const request = deploymentRequests.find(req => req.request_id === requestId);
+    setRequestToReject(request || null);
     setShowRejectForm(true);
-  }, []);
+  }, [deploymentRequests]);
 
   // Submit rejection with validation
   const submitRejection = useCallback(async () => {
-    if (selectedRequest && rejectReason.trim()) {
+    if (requestToReject && rejectReason.trim()) {
       try {
-        await rejectRequest(selectedRequest, rejectReason);
+        await approveDeploymentRequest(requestToReject.request_id, { 
+          action: 'reject', 
+          reason: rejectReason 
+        });
         setShowRejectForm(false);
-        setSelectedRequest(null);
+        setRequestToReject(null);
         setRejectReason('');
+        // Refresh the requests list
+        await fetchDeploymentRequests();
       } catch (error) {
         console.error('Failed to reject request:', error);
       }
     }
-  }, [selectedRequest, rejectReason, rejectRequest]);
+  }, [requestToReject, rejectReason, fetchDeploymentRequests]);
 
   // Status badge renderer
   const getStatusBadge = useCallback((status: string) => {
     const variants: Record<string, any> = {
+      pending: { variant: 'warning', label: 'Pending Review' },
+      approved: { variant: 'default', label: 'Approved' },
+      rejected: { variant: 'destructive', label: 'Rejected' },
+      deployed: { variant: 'success', label: 'Deployed' },
+      failed: { variant: 'destructive', label: 'Failed' },
+      // Legacy status mapping for backward compatibility
       PENDING: { variant: 'warning', label: 'Pending Review' },
       APPROVED: { variant: 'default', label: 'Approved' },
       REJECTED: { variant: 'destructive', label: 'Rejected' },
@@ -970,23 +1005,23 @@ export const AdminDashboard: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {requests
-                    .filter(req => req.status === 'PENDING')
+                  {deploymentRequests
+                    .filter(req => req.status === 'pending')
                     .slice(0, 3)
                     .map((request) => (
-                      <div key={request.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div key={request.request_id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div>
                           <p className="font-medium">
-                            {request.resource_config?.serviceName || 'Unknown Service'}
+                            {request.service_name || request.name || 'Unknown Service'}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Requested by {request.requester} • {formatDate(request.created_at)}
+                            Requested by developer-user • {formatDate(request.created_at)}
                           </p>
                         </div>
                         <div className="flex gap-2">
                           <Button 
                             size="sm" 
-                            onClick={() => handleApprove(request.id)}
+                            onClick={() => handleApprove(request.request_id)}
                             disabled={loading}
                           >
                             <CheckSquare className="h-3 w-3 mr-1" />
@@ -995,7 +1030,10 @@ export const AdminDashboard: React.FC = () => {
                           <Button 
                             variant="destructive" 
                             size="sm"
-                            onClick={() => handleReject(request.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReject(request.request_id);
+                            }}
                             disabled={loading}
                           >
                             <XCircle className="h-3 w-3 mr-1" />
@@ -1027,7 +1065,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="text-center p-8 text-destructive">
                   Error loading requests: {error}
                 </div>
-              ) : requests.length === 0 ? (
+              ) : deploymentRequests.length === 0 ? (
                 <div className="text-center p-8 text-muted-foreground">
                   No deployment requests found.
                 </div>
@@ -1045,15 +1083,15 @@ export const AdminDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {requests.slice(0, 20).map((request) => (
-                        <TableRow key={request.id}>
+                      {deploymentRequests.slice(0, 20).map((request) => (
+                        <TableRow key={request.request_id}>
                           <TableCell className="font-medium">
-                            {(request as any).configuration?.bucketName || request.resource_config?.serviceName || request.resource_config?.service_name || (request as any).title || 'Unknown'}
+                            {request.service_name || request.name || 'Unknown'}
                           </TableCell>
-                          <TableCell>{(request as any).requested_by || request.requester}</TableCell>
+                          <TableCell>{'developer-user'}</TableCell>
                           <TableCell>
                             <Badge variant="outline">
-                              {(request as any).request_type === 's3_bucket' ? 'S3 BUCKET' : (request.resource_type || (request as any).request_type || 'Unknown').replace('_', ' ').toUpperCase()}
+                              {request.template_name}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -1064,11 +1102,11 @@ export const AdminDashboard: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
-                              {request.status === 'PENDING' && (
+                              {request.status === 'pending' && (
                                 <>
                                   <Button 
                                     size="sm"
-                                    onClick={() => handleApprove(request.id)}
+                                    onClick={() => handleApprove(request.request_id)}
                                     disabled={loading}
                                   >
                                     <CheckSquare className="h-3 w-3 mr-1" />
@@ -1077,7 +1115,10 @@ export const AdminDashboard: React.FC = () => {
                                   <Button 
                                     variant="destructive" 
                                     size="sm"
-                                    onClick={() => handleReject(request.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReject(request.request_id);
+                                    }}
                                     disabled={loading}
                                   >
                                     <XCircle className="h-3 w-3 mr-1" />
@@ -1356,7 +1397,7 @@ export const AdminDashboard: React.FC = () => {
                   variant="outline" 
                   onClick={() => {
                     setShowRejectForm(false);
-                    setSelectedRequest(null);
+                    setRequestToReject(null);
                     setRejectReason('');
                   }}
                 >
@@ -1377,7 +1418,7 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {/* Request Details Modal */}
-      {selectedRequest && (() => {
+      {selectedRequest && !showRejectForm && (() => {
         // Type assertion for localStorage-based requests
         const request = selectedRequest as any;
         return (
@@ -1386,7 +1427,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Request Details</h2>
-                <p className="text-gray-600">ID: {request.id}</p>
+                <p className="text-gray-600">ID: {request.request_id}</p>
               </div>
               <Button 
                 variant="outline" 
@@ -1519,7 +1560,7 @@ export const AdminDashboard: React.FC = () => {
                   </Button>
                   <Button 
                     onClick={() => {
-                      approveRequest(request.id);
+                      handleApprove(request.request_id);
                       setSelectedRequest(null);
                     }}
                   >

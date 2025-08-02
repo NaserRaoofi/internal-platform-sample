@@ -42,9 +42,8 @@ export const SirwanTestS3Form: React.FC<SirwanTestS3FormProps> = ({ onSuccess, o
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Basic validation only
     if (!formData.bucketName.trim()) {
-      if (onError) onError('Bucket name is required');
+      alert('Bucket name is required');
       return;
     }
     
@@ -52,42 +51,53 @@ export const SirwanTestS3Form: React.FC<SirwanTestS3FormProps> = ({ onSuccess, o
     setDeploymentFailed(false);
     setDeploymentError('');
     
+    const apiUrl = 'http://localhost:8000/api/v1/create-infra';
+    const payload = {
+      resource_type: 's3',
+      name: formData.bucketName,
+      environment: 'dev',
+      region: 'us-east-1',
+      config: {},
+      tags: {}
+    };
+    
+    console.log('Making request to:', apiUrl);
+    console.log('Payload:', payload);
+    
     try {
-      // For developer workflow: Store request locally and notify admin
-      // Generate a request ID for tracking
-      const requestId = `REQ-${Date.now()}`;
-      
-      // Store request in localStorage for admin to review
-      const requestData = {
-        id: requestId,
-        request_type: 's3_bucket',
-        title: `S3 Bucket: ${formData.bucketName}`,
-        description: `Request for S3 bucket '${formData.bucketName}' in ${formData.environment} environment with${formData.ec2Enabled ? '' : 'out'} EC2 integration`,
-        configuration: formData,
-        estimated_cost: parseFloat(calculateTotalCost()),
-        requested_by: 'developer-user', // In real app, get from auth
-        requester_role: 'developer',
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload),
+      });
 
-      // Store in localStorage (in real app, this would be sent to admin notification system)
-      const existingRequests = JSON.parse(localStorage.getItem('pending-requests') || '[]');
-      existingRequests.push(requestData);
-      localStorage.setItem('pending-requests', JSON.stringify(existingRequests));
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Response data:', result);
       
-      // Simulate sending notification to admin (in real app, this could be email, Slack, etc.)
-      console.log('Request sent to admin for approval:', requestData);
-      
-      setJobId(requestId);
-      if (onSuccess) onSuccess(requestId);
+      if (result.job_id) {
+        setJobId(result.job_id);
+        alert('Success! Request submitted: ' + result.job_id);
+        if (onSuccess) onSuccess(result.job_id);
+      } else {
+        throw new Error('No job_id in response');
+      }
       
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Fetch error:', error);
       setDeploymentFailed(true);
-      setDeploymentError(message);
-      if (onError) onError(message);
+      setDeploymentError(error instanceof Error ? error.message : 'Unknown error');
+      alert('Error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      if (onError) onError(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsLoading(false);
     }

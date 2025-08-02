@@ -9,7 +9,6 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from redis import Redis
 from rq import Queue
 from utils.job_status import (
     create_job,
@@ -17,17 +16,13 @@ from utils.job_status import (
     JobStatus as UtilsJobStatus,
     add_job_log
 )
+from infrastructure.database import RedisConnectionManager
 
 logger = logging.getLogger(__name__)
 
-# Redis connection and queue setup
-redis_conn = Redis(
-    host="localhost",
-    port=6379,
-    db=0,
-    decode_responses=False  # Let RQ handle decoding
-)
-job_queue = Queue("default", connection=redis_conn)
+# Redis connection manager with pooling
+redis_manager = RedisConnectionManager()
+job_queue = Queue("default", connection=redis_manager.get_connection())
 
 
 class InfrastructureService:

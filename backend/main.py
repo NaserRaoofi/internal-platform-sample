@@ -15,12 +15,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from interfaces.api.health import router as health_router
 from interfaces.api.infrastructure import router as infra_router
 from interfaces.api.jobs import router as jobs_router
+from infrastructure.database import db_manager
 
 
 # Simple setup functions
 async def setup_database():
     """Initialize database connection"""
-    logger.info("📊 Database setup completed")
+    try:
+        db_manager.initialize_database()
+        logger.info("📊 Database setup completed")
+    except Exception as e:
+        logger.error(f"Database setup failed: {e}")
+        raise
 
 
 async def setup_redis():
@@ -42,7 +48,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Cleanup async resources
     logger.info("🛑 Shutting down Cloud Automation Platform...")
+    await db_manager.close()
 
 
 def create_app() -> FastAPI:
@@ -59,7 +67,11 @@ def create_app() -> FastAPI:
     # Setup CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002"
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

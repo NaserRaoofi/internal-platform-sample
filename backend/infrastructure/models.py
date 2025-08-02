@@ -92,6 +92,40 @@ class InfrastructureResource(Base):
     )
 
 
+class DeploymentRequest(Base):
+    """Deployment requests requiring admin approval - persistent storage"""
+
+    __tablename__ = "deployment_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(
+        String(36), unique=True, nullable=False, index=True
+    )  # UUID as string
+    user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+
+    # Request Details
+    resource_type = Column(String(50), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    environment = Column(String(20), default="dev", index=True)
+    region = Column(String(30), default="us-east-1")
+    config = Column(JSON)  # Resource configuration
+    tags = Column(JSON)    # Resource tags
+
+    # Approval Workflow
+    # pending, approved, rejected, deployed, failed
+    status = Column(String(20), default="pending", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    approved_at = Column(DateTime)
+    approved_by = Column(String(50))  # admin username
+    rejection_reason = Column(Text)
+    job_id = Column(String(36))  # Set when deployment starts
+
+    # Relationships
+    user = relationship("User")
+
+
 class InfrastructureJob(Base):
     """Job history - persistent storage for completed jobs"""
 

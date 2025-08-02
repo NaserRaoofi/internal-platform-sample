@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
     redis_password: Optional[str] = None
+    redis_max_connections: int = 20
+    redis_socket_timeout: int = 5
+    redis_socket_connect_timeout: int = 5
+    redis_health_check_interval: int = 30
 
     # Database Configuration
     database_url: str = "sqlite:///./internal_platform.db"
