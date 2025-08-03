@@ -1,6 +1,6 @@
 """
-Database Manager - SQLite + Redis Architecture with Async Support
-================================================================
+Database Manager - SQLite + Redis Architecture
+=============================================================
 
 SQLite: Persistent data storage with async operations
 Redis: Caching and job queues with proper connection pooling
@@ -57,6 +57,7 @@ class RedisConnectionManager:
             )
             
             # RQ-specific pool without decoded responses
+            # Use longer timeout for BLPOP operations
             self._rq_connection_pool = ConnectionPool(
                 host=settings.redis_host,
                 port=settings.redis_port,
@@ -64,7 +65,7 @@ class RedisConnectionManager:
                 decode_responses=False,  # RQ needs binary data
                 max_connections=settings.redis_max_connections,
                 socket_connect_timeout=settings.redis_socket_connect_timeout,
-                socket_timeout=settings.redis_socket_timeout,
+                socket_timeout=300,  # 5 minutes for RQ BLPOP operations
                 socket_keepalive=True,
                 socket_keepalive_options={},
                 health_check_interval=settings.redis_health_check_interval,
