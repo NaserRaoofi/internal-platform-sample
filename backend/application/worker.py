@@ -217,6 +217,10 @@ class TerraformWorker:
             },
         }
 
+        # Add resource-specific variables based on resource type
+        if job_request.resource_type.value == "s3":
+            tfvars["bucket_name"] = job_request.name
+
         # Add resource-specific configuration
         tfvars.update(job_request.config)
 

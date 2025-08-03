@@ -4,7 +4,6 @@
 variable "bucket_name" {
   description = "Base name for the S3 bucket (suffix will be added automatically)"
   type        = string
-  default     = "sirwan-test-bucket"
   
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$", var.bucket_name))
