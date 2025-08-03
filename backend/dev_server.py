@@ -68,35 +68,71 @@ def setup_logging(
 logger = logging.getLogger("dev-server")
 
 
-def run_command(cmd, name, cwd=None):
+def run_command(cmd, name, cwd=None, background=False):
     """Run a command and stream output with proper logging"""
     logger.info(f"Starting service: {name}")
     process = None
     try:
-        process = subprocess.Popen(
-            cmd,
-            shell=True,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=1,
-        )
-
-        if process.stdout:
-            for line in iter(process.stdout.readline, ""):
-                # Use a separate logger for service output
-                service_logger = logging.getLogger(f"service.{name.lower()}")
-                service_logger.info(line.strip())
-
-            process.stdout.close()
-
-        return_code = process.wait()
-
-        if return_code != 0:
-            logger.error(f"Service {name} exited with code {return_code}")
+        if background:
+            # Run in background with nohup and redirect output to log file
+            log_file = f"logs/{name.lower()}.log"
+            os.makedirs("logs", exist_ok=True)
+            
+            # Use nohup to run in background - simplified approach
+            full_cmd = f"nohup {cmd} > {log_file} 2>&1 &"
+            
+            # Use os.system for background processes
+            os.system(full_cmd)
+            
+            # Give it a moment to start
+            time.sleep(3)
+            
+            # Check if process started by looking for it in process list
+            check_cmd = cmd.split()[-3:]  # Get last 3 parts of command
+            search_term = " ".join(check_cmd)
+            
+            ps_result = subprocess.run(
+                ["pgrep", "-f", search_term],
+                capture_output=True,
+                text=True
+            )
+            
+            if ps_result.returncode == 0 and ps_result.stdout.strip():
+                pids = ps_result.stdout.strip().split('\n')
+                pid = pids[-1]  # Get the most recent PID
+                logger.info(f"Service {name} started in background")
+                logger.info(f"PID: {pid}, Logs: {log_file}")
+                return int(pid)
+            else:
+                logger.error(f"Service {name} failed to start in background")
+                return None
         else:
-            logger.info(f"Service {name} completed successfully")
+            # Run in foreground (original behavior)
+            process = subprocess.Popen(
+                cmd,
+                shell=True,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+            )
+
+            if process.stdout:
+                for line in iter(process.stdout.readline, ""):
+                    # Use a separate logger for service output
+                    logger_name = f"service.{name.lower()}"
+                    service_logger = logging.getLogger(logger_name)
+                    service_logger.info(line.strip())
+
+                process.stdout.close()
+
+            return_code = process.wait()
+
+            if return_code != 0:
+                logger.error(f"Service {name} exited with code {return_code}")
+            else:
+                logger.info(f"Service {name} completed successfully")
 
     except KeyboardInterrupt:
         logger.warning(f"Stopping service: {name}")
@@ -115,7 +151,7 @@ def check_requirements():
         "python3": "python3 --version",
         "poetry": "poetry --version",
         "docker": "docker --version",
-        "terraform": "terraform version",
+        "terraform": "/snap/bin/terraform version",  # Use full path for snap
     }
 
     missing = []
@@ -127,11 +163,45 @@ def check_requirements():
             if result.returncode == 0:
                 logger.info(f"Required tool found: {tool}")
             else:
-                missing.append(tool)
-                logger.warning(f"Required tool missing: {tool}")
+                # Special handling for terraform snap permission issue
+                if tool == "terraform" and "snap-confine" in result.stderr:
+                    logger.warning(
+                        "Terraform found but has snap permission issue - "
+                        "continuing anyway"
+                    )
+                    logger.info(
+                        f"Required tool found: {tool} "
+                        "(with snap permission warning)"
+                    )
+                else:
+                    missing.append(tool)
+                    logger.warning(f"Required tool missing: {tool}")
         except FileNotFoundError:
-            missing.append(tool)
-            logger.warning(f"Required tool not found: {tool}")
+            # Try alternative terraform paths
+            if tool == "terraform":
+                terraform_paths = [
+                    "/usr/bin/terraform",
+                    "/usr/local/bin/terraform",
+                    "/snap/bin/terraform"
+                ]
+                found = False
+                for path in terraform_paths:
+                    if os.path.exists(path):
+                        logger.warning(
+                            f"Terraform found at {path} but may have "
+                            "execution issues - continuing anyway"
+                        )
+                        logger.info(
+                            f"Required tool found: {tool} (alternative path)"
+                        )
+                        found = True
+                        break
+                if not found:
+                    missing.append(tool)
+                    logger.warning(f"Required tool not found: {tool}")
+            else:
+                missing.append(tool)
+                logger.warning(f"Required tool not found: {tool}")
 
     if missing:
         logger.error(f"Missing required tools: {', '.join(missing)}")
@@ -352,6 +422,11 @@ def main():
         default=5,
         help="Number of backup log files to keep (default: 5)",
     )
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Run services in background (daemon mode)",
+    )
     args = parser.parse_args()
 
     # Setup logging with specified level and rotation settings
@@ -412,47 +487,81 @@ TERRAFORM_DIR=../terraform
             "--port 8000",
             "name": "FastAPI-Server",
             "cwd": None,
+            "background": args.background,
         },
         {
-            "cmd": "poetry run python worker.py",
+            "cmd": "poetry run python application/worker.py",
             "name": "RQ-Worker",
             "cwd": None,
+            "background": args.background,
         },
-        {
+    ]
+    
+    # Only add Redis logs if not in background mode
+    if not args.background:
+        commands.append({
             "cmd": "docker logs -f internal-platform-redis",
             "name": "Redis-Logs",
             "cwd": None,
-        },
-    ]
+            "background": False,
+        })
 
     logger.info("Service endpoints:")
     logger.info("- FastAPI Server: http://localhost:8000")
     logger.info("- API Documentation: http://localhost:8000/docs")
     logger.info("- Redis: localhost:6379 (Docker container)")
-    logger.info("- Redis Logs: Streaming from Docker container")
-    logger.info("Use Ctrl+C to stop all services")
+    if not args.background:
+        logger.info("- Redis Logs: Streaming from Docker container")
+        logger.info("Use Ctrl+C to stop all services")
+    else:
+        logger.info("- Services running in background mode")
+        logger.info("- Use 'pkill -f uvicorn' to stop FastAPI server")
+        logger.info("- Use 'pkill -f worker.py' to stop RQ worker")
     logger.info("-" * 60)
 
-    try:
-        with ThreadPoolExecutor(max_workers=len(commands)) as executor:
-            futures = []
-            for cmd_info in commands:
-                future = executor.submit(
-                    run_command,
-                    cmd_info["cmd"],
-                    cmd_info["name"],
-                    cmd_info.get("cwd"),
-                )
-                futures.append(future)
+    if args.background:
+        # Background mode - start services and exit
+        pids = []
+        for cmd_info in commands:
+            pid = run_command(
+                cmd_info["cmd"],
+                cmd_info["name"],
+                cmd_info.get("cwd"),
+                cmd_info.get("background", False)
+            )
+            if pid:
+                pids.append(pid)
+        
+        if pids:
+            logger.info("All services started in background mode")
+            logger.info(f"Service PIDs: {pids}")
+            logger.info("Development server setup complete")
+        else:
+            logger.error("Failed to start services in background")
+            sys.exit(1)
+    else:
+        # Foreground mode - original behavior
+        try:
+            with ThreadPoolExecutor(max_workers=len(commands)) as executor:
+                futures = []
+                for cmd_info in commands:
+                    future = executor.submit(
+                        run_command,
+                        cmd_info["cmd"],
+                        cmd_info["name"],
+                        cmd_info.get("cwd"),
+                        cmd_info.get("background", False)
+                    )
+                    futures.append(future)
 
-            # Wait for all services
-            for future in futures:
-                future.result()
+                # Wait for all services
+                for future in futures:
+                    future.result()
 
-    except KeyboardInterrupt:
-        logger.info("Shutdown signal received. Stopping all services...")
-        stop_redis_compose()
-        logger.info("All services stopped successfully")
+        except KeyboardInterrupt:
+            logger.info("Shutdown signal received. Stopping all services...")
+            stop_redis_compose()
+            logger.info("All services stopped successfully")
 
 
 if __name__ == "__main__":

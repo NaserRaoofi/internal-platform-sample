@@ -354,7 +354,7 @@ def process_infrastructure_job(job_data: Dict[str, Any]) -> str:
 def start_worker():
     """Start the RQ worker"""
     redis_manager = RedisConnectionManager()
-    redis_conn = redis_manager.get_connection()
+    redis_conn = redis_manager.get_rq_connection()  # Use RQ-specific connection
 
     queues = [
         Queue("default", connection=redis_conn),

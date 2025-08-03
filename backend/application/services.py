@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Redis connection manager with pooling
 redis_manager = RedisConnectionManager()
-job_queue = Queue("default", connection=redis_manager.get_connection())
+job_queue = Queue("default", connection=redis_manager.get_rq_connection())
 
 
 class InfrastructureService:

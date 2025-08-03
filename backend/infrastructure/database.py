@@ -31,6 +31,7 @@ class RedisConnectionManager:
     
     _instance = None
     _connection_pool = None
+    _rq_connection_pool = None  # Separate pool for RQ
     
     def __new__(cls):
         if cls._instance is None:
@@ -39,6 +40,7 @@ class RedisConnectionManager:
     
     def __init__(self):
         if self._connection_pool is None:
+            # General purpose pool with decoded responses
             self._connection_pool = ConnectionPool(
                 host=settings.redis_host,
                 port=settings.redis_port,
@@ -53,14 +55,34 @@ class RedisConnectionManager:
                 retry_on_timeout=True,
                 retry_on_error=[ConnectionError, TimeoutError],
             )
+            
+            # RQ-specific pool without decoded responses
+            self._rq_connection_pool = ConnectionPool(
+                host=settings.redis_host,
+                port=settings.redis_port,
+                password=settings.redis_password,
+                decode_responses=False,  # RQ needs binary data
+                max_connections=settings.redis_max_connections,
+                socket_connect_timeout=settings.redis_socket_connect_timeout,
+                socket_timeout=settings.redis_socket_timeout,
+                socket_keepalive=True,
+                socket_keepalive_options={},
+                health_check_interval=settings.redis_health_check_interval,
+                retry_on_timeout=True,
+                retry_on_error=[ConnectionError, TimeoutError],
+            )
             logger.info(
-                f"Redis connection pool initialized with "
-                f"{settings.redis_max_connections} max connections"
+                f"Redis connection pools initialized with "
+                f"{settings.redis_max_connections} max connections each"
             )
     
     def get_connection(self) -> Redis:
-        """Get Redis connection from pool"""
+        """Get Redis connection from general pool (with decoded responses)"""
         return Redis(connection_pool=self._connection_pool)
+    
+    def get_rq_connection(self) -> Redis:
+        """Get Redis connection for RQ (without decoded responses)"""
+        return Redis(connection_pool=self._rq_connection_pool)
     
     def health_check(self) -> bool:
         """Check Redis connectivity using pooled connection"""
